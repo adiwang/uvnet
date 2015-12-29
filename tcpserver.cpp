@@ -7,6 +7,7 @@
 namespace UVNET
 {
 
+/*********************************************** TCPServer *****************************************************/
 TCPServer::TCPServer(unsigned char pack_head, unsigned char pack_tail)
 	: _pack_head(pack_head), _pack_tail(pack_tail)
 	, _new_conn_cb(nullptr), _new_conn_userdata(nullptr), _close_cb(nullptr), _close_userdata(nullptr)
@@ -307,6 +308,13 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 		log_error("%s|accept failed|%s", __FUNCTION__, _err_msg.c_str());
 		return;
 	}
+
+	// get ip
+	struct sockaddr_in client_addr;
+	int client_addr_len = sizeof(client_addr);
+	uv_tcp_getsockname(ctx->tcp_handle, (struct sockaddr *)&client_addr, &client_addr_len);
+	inet_ntop(AF_INET, &client_addr.sin_addr, ctx->client_ip, sizeof(ctx->client_ip));
+
 	ctx->packet->SetPacketCB(GetPacket, ctx);
 	ctx->packet->Start(server_instance->_pack_head, server_instance->_pack_tail);
 	iret = uv_read_start((uv_stream_t *)&ctx->tcp_handle, AllocBufferForRecv, OnRecv);
@@ -318,7 +326,7 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 		return;
 	}
 
-	Session *session = new Session(ctx, server_instance->_pack_head, server_instance->_pack_tail, &server_instance->_loop);
+	Session *session = new Session(ctx, &server_instance->_loop);
 	session->SetCloseCB(TCPServer::SessionClosed, server_instance);
 	
 	uv_mutex_lock(&server_instance->_mutex_sessions);
@@ -329,14 +337,8 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	{
 		server_instance->_new_conn_cb(sid, server_instance->_new_conn_userdata);
 	}
-	// get ip
-	struct sockaddr_in client_addr;
-	int client_addr_len = sizeof(client_addr);
-	char client_ip[20] = {0};
-	uv_tcp_getsockname(ctx->tcp_handle, (struct sockaddr *)&client_addr, &client_addr_len);
-	inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
 
-	log_info("new connect client|%d|%s", sid, client_ip);
+	log_info("new connect client|%d|%s", sid, ctx->client_ip);
 }
 
 void TCPServer::_recycle_one_ctx(SessionCtx* ctx)
@@ -371,6 +373,37 @@ SessionCtx* TCPServer::_fetch_one_ctx()
 	return ctx;
 }
 
+WriteParam* TCPServer::_fetch_one_param()
+{
+	WriteParam* param = NULL;
+	uv_mutex_lock(&_mutex_params);
+	if(_avail_params.empty())
+	{
+		param = WriteParam::Alloc();
+	}
+	else
+	{
+		param = _avail_params.front();
+		_avail_params.pop_front();
+	}
+	uv_mutex_unlock(&_mutex_params);
+	return param;
+}
+
+void TCPServer::_recycle_one_param(WriteParam* param)
+{
+	uv_mutex_lock(&_mutex_params);
+	if(_avail_params.size() > MAXLISTSIZE)
+	{
+		WriteParam::Release(param);
+	}
+	else
+	{
+		_avail_params.push_back(param);
+	}
+	uv_mutex_unlock(&_mutex_params);
+}
+
 void TCPServer::SessionClosed(int sid, void *userdata)
 {
 	TCPServer *server = (TCPServer *)userdata;
@@ -381,14 +414,7 @@ void TCPServer::SessionClosed(int sid, void *userdata)
 		if(server->_close_cb) server->_close_cb(sid, server->_close_userdata);
 		server->_recycle_one_ctx(it->second->GetCtx());
 
-		// get ip
-		struct sockaddr_in client_addr;
-		int client_addr_len = sizeof(client_addr);
-		char client_ip[20] = {0};
-		uv_tcp_getsockname(it->second->GetCtx()->tcp_handle, (struct sockaddr *)&client_addr, &client_addr_len);
-		inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, sizeof(client_ip));
-
-		log_info("session closed|%d|%s", sid, client_ip);
+		log_info("session closed|%d|%s", sid, it->second->GetCtx()->client_ip);
 		delete it->second;
 		server->_sessions.erase(it);
 	}
@@ -406,5 +432,168 @@ void TCPServer::CloseWalkCB(uv_handle_t* handle, void *arg)
 	TCPServer *server = (TCPServer *)arg;
 	if(!uv_is_closing(handle)) uv_close(handle, AfterServerClose);
 }
+
+bool TCPServer::_send(const std::string& data, SessionCtx* ctx)
+{
+	if(data.empty())
+	{
+		log_info("send data is empty|%d", sid);
+		return true;
+	}
+	WriteParam* param = NULL;
+	param = _fetch_one_param();
+	if(param->buf_true_len < data.length())
+	{
+		param->buf.base = (char *)realloc(param->buf.base, data.length());
+		param->buf_true_len = data.length();
+	}
+	memcpy(param->buf.base, data.data(), data.length());
+	param->buf.len = data.length();
+	param->write_req.data = ctx;
+	int iret = uv_write((uv_write_t *)&param->write_req, (uv_stream_t *)&ctx->tcp_handle, &param->buf, 1, OnSend);
+	if(iret)
+	{
+		_recycle_one_param(param);
+		_err_msg = GetUVError(iret);
+		log_error("%s|send data failed|%s|%d", __FUNCTION__, _err_msg.c_str(), ctx->sid);
+		return false;
+	}
+	return true;
+}
+
+bool TCPServer::_broadcast(const std::string& data, std::vector<int> exclude_ids)
+{
+	if(data.empty())
+	{
+		log_info("broadcast data is empty");
+		return true;
+	}
+	
+	uv_mutex_lock(&_mutex_sessions);
+	Session *session = NULL;
+	WriteParam *param = NULL;
+	if(exclude_ids.empty())
+	{
+		for(auto it = _sessions.begin(); it != _sessions.end(); ++it)
+		{
+			session = it->second;
+			_send(data, session->GetCtx());
+		}
+	}
+	else
+	{
+		for(auto it = _sessions.begin(); it != _sessions.end(); ++it)
+		{
+			auto find_it = std::find(exclude_ids.begin(), exclude_ids.end(), it->first);
+			if(find_it != exclude_ids.end())
+			{
+				exclude_ids.erase(find_it);
+				continue;
+			}
+			session = it->second;
+			_send(data, session->GetCtx());
+		}
+	}
+	uv_mutex_unlock(&_mutex_sessions);
+	return true;
+}
+
+/***************************************** Session *******************************************************/
+Session::Session(SessionCtx* ctx, uv_loop_t* loop)
+	: _ctx(ctx), _sid(sid), _loop(loop), _is_closed(true), _recv_cb(nullptr), _recv_userdata(nullptr), _close_cb(nullptr), _close_userdata(nullptr)
+{
+	_init();
+}
+
+Session::~Session()
+{
+	Close();
+	while(!_is_closed)
+	{
+		ThreadSleep(10);
+	}
+}
+
+bool Session::_init()
+{
+	if(!_is_closed)	return true;
+	ctx->parent_session = this;
+	_is_closed = false;
+	return true;
+}
+
+void Session::_session_close(uv_handle_t* handle)
+{
+	Session* session = (Session *)handle->data;
+	assert(session);
+	if(handle == (uv_handle_t *)&session->ctx->tcp_handle)
+	{
+		session->_is_closed = true;
+		log_info("session closed|%d", session->ctx->sid);
+		if(session->_close_cb)	session->_close_cb(session->ctx->sid, session->_close_userdata);
+	}
+}
+
+void Session::SetRecvCB(ServerRecvCB cb, void* userdata)
+{
+	_recv_cb = cb;
+	_recv_userdata = userdata;
+}
+
+void Session::SetCloseCB(TcpCloseCB cb, void* userdata)
+{
+	_close_cb = cb;
+	_close_userdata = userdata;
+}
+
+SessionCtx* Session::GetCtx() const
+{
+	return _ctx;
+}
+
+void Session::Close()
+{
+	if(_is_closed)	return;
+	ctx->tcp_handle.data = this;
+	uv_close((uv_handle_t *)&ctx->tcp_handle, _session_close);
+}
+
+/*********************************************** SessionCtx *****************************************************/
+
+SessionCtx* SessionCtx::Alloc(void *parent_server)
+{
+	SessionCtx* ctx = (SessionCtx *)malloc(sizeof(SessionCtx));
+	ctx->packet = new PacketSync;
+	ctx->read_buf.base = (char *)malloc(BUFFER_SIZE);
+	ctx->read_buf.len = BUFFER_SIZE;
+	memset(ctx->client_ip, 0, sizeof(ctx->client_ip));
+	ctx->parent_server = parent_server;
+	ctx->parent_session = NULL;
+	return ctx;
+}
+
+void SessionCtx::Release(SessionCtx* ctx)
+{
+	delete ctx->packet;
+	free(ctx->read_buf.base);
+	free(ctx);
+}
+
+/*********************************************** WriteParam *****************************************************/
+WriteParam* WriteParam::Alloc()
+{
+	WriteParam* param = (WriteParam *)malloc(sizeof(WriteParam));
+	param->buf.base = (char *)malloc(BUFFER_SIZE);
+	param->buf.len = BUFFER_SIZE;
+	param->buf_true_len = BUFFER_SIZE;
+	return param;
+}
+
+void WriteParam::Release(WriteParam* param)
+{
+	free(param->buf.base);
+	free(param);
+}
+
 
 }	// end of namespace UVNET
