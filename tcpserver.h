@@ -1,5 +1,5 @@
-#ifndef TCPSERVER_H
-#define TCPSERVER_H
+#ifndef _TCPSERVER_H
+#define _TCPSERVER_H
 #include <string>
 #include <map>
 #include <list>
