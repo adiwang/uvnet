@@ -71,6 +71,8 @@ private:
 	void _close();
 	bool _run(int status = UV_RUN_DEFAULT);
 	void _send(uv_write_t* req = NULL);
+	bool _start_connect();
+	void _stop_connect();
 
 private:
 	enum
@@ -81,14 +83,14 @@ private:
 		CONNECT_DIS,
 	};
 	
-	TcpClientCtx*	_ctx;
+	TcpClientCtx*		_ctx;
 	uv_async_t		_async_handle;
 	uv_loop_t		_loop;
 	bool			_is_closed;
 	bool			_is_user_closed;
 	uv_thread_t		_connect_thread_handle;
-	uv_connect_t	_connect_req;
-	int				_connect_status;
+	uv_connect_t		_connect_req;
+	int			_connect_status;
 	
 	PodCircularBuffer<char> _write_circularbuf;
 	uv_mutex_t _mutex_writebuf;
@@ -110,7 +112,7 @@ private:
 	int64_t			_repeat_time;
 
 	std::string		_connect_ip;
-	int				_connect_port;
+	int			_connect_port;
 	std::string		_err_msg;
 
 	unsigned char	_packet_head;
