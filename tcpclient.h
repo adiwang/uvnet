@@ -22,7 +22,7 @@ struct TcpClientCtx
 	void* parent_server;
 
 	static TcpClientCtx* Alloc(void* parent_server);
-	static void Free(TcpClientCtx* ctx);
+	static void Release(TcpClientCtx* ctx);
 };
 
 struct ClientWriteParam
@@ -32,7 +32,7 @@ struct ClientWriteParam
 	int buf_true_len;
 
 	static ClientWriteParam* Alloc();
-	static void Free(ClientWriteParam* param);
+	static void Release(ClientWriteParam* param);
 };
 
 class TCPClient
