@@ -41,7 +41,7 @@ public:
 	TCPServer(unsigned char pack_head, unsigned char pack_tail);
 	virtual ~TCPServer();
 	// Start/Stop the log
-	// static StartLog(const char * log_path = nullptr);
+	static bool StartLog(LogLevel l, const char* p_modulename, const char* p_logdir);
 	// static void StopLog();
 
 	void SetNewConnectCB(NewConnectCB cb, void *userdata);

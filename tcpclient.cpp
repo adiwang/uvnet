@@ -1,4 +1,5 @@
 #include "tcpclient.h"
+#include "log.h"
 #define MAXLISTSIZE	20
 namespace UVNET
 {
@@ -50,19 +51,19 @@ namespace UVNET
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|init loop failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|init loop failed|%s", __FUNCTION__, _err_msg.c_str());
 		}
 		iret = uv_mutex_init(&_mutex_writebuf);
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|init writebuf mutex failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|init writebuf mutex failed|%s", __FUNCTION__, _err_msg.c_str());
 		}
 		iret = uv_mutex_init(&_mutex_params);
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|init params mutex failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|init params mutex failed|%s", __FUNCTION__, _err_msg.c_str());
 		}
 		_connect_req.data = this;
 	}
@@ -79,7 +80,7 @@ namespace UVNET
 			ClientWriteParam::Release(*it);
 		}
 		_avail_params.clear();
-		log_info("tcp client closed");
+		LOG_TRACE("tcp client closed");
 	}
 
 	bool TCPClient::_init()
@@ -89,7 +90,7 @@ namespace UVNET
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|init async close handle failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|init async close handle failed|%s", __FUNCTION__, _err_msg.c_str());
 			return false;
 		}
 		_async_handle.data = this;
@@ -98,7 +99,7 @@ namespace UVNET
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|init tcp handle failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|init tcp handle failed|%s", __FUNCTION__, _err_msg.c_str());
 			return false;
 		}
 		_ctx->tcp_handle.data = ctx;
@@ -110,11 +111,11 @@ namespace UVNET
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|init connect timer failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|init connect timer failed|%s", __FUNCTION__, _err_msg.c_str());
 			return false;
 		}
 		_connect_timer.data = this;
-		log_info("client init");
+		LOG_TRACE("client init");
 		_is_closed = false;
 		return true;
 	}
@@ -124,7 +125,7 @@ namespace UVNET
 		if(_is_closed)	return;
 		_stop_connect();
 		uv_walk(&_loop, CloseWalkCB, this);
-		log_info("tcp client closed");
+		LOG_TRACE("tcp client closed");
 	}
 
 	bool TCPClient::_run(int status)
@@ -133,12 +134,12 @@ namespace UVNET
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|run loop failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|run loop failed|%s", __FUNCTION__, _err_msg.c_str());
 			return false;
 		}
 		// codes come here should be close
 		_is_closed = true;
-		log_info("client had closed");
+		LOG_TRACE("client had closed");
 		if(_close_cb) _close_cb(-1, _close_userdata);
 		return true;
 	}
@@ -149,7 +150,7 @@ namespace UVNET
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|set tcp no delay failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|set tcp no delay failed|%s", __FUNCTION__, _err_msg.c_str());
 			return false;
 		}
 		return true;
@@ -161,7 +162,7 @@ namespace UVNET
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|set tcp keepalive failed|%s", __FUNCTION__, _err_msg.c_str());
+			LOG_ERROR("%s|set tcp keepalive failed|%s", __FUNCTION__, _err_msg.c_str());
 			return false;
 		}
 		return true;
@@ -178,17 +179,17 @@ namespace UVNET
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|ip or port invalid|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
+			LOG_ERROR("%s|ip or port invalid|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
 			return false;
 		}
 		iret = uv_thread_create(&_connect_thread_handle, ConnectThread, this);
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
-			log_error("%s|connect failed|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
+			LOG_ERROR("%s|connect failed|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
 			return false;
 		}
-		log_info("client start connect |%s|%d", ip, port);
+		LOG_TRACE("client start connect |%s|%d", ip, port);
 		int retry_cont = 0;
 		while(_connect_status == CONNECT_DIS)
 		{
@@ -221,7 +222,7 @@ namespace UVNET
 		{
 			pClient->_connect_status = CONNECT_ERROR;
 			pClient->_err_msg = GetUVError(status);
-			log_error("%s|connect error|%s|%s|%d", __FUNCTION__, pClient->_err_msg.c_str(), pClient->_connect_ip.c_str(), pClient->_connect_port);
+			LOG_ERROR("%s|connect error|%s|%s|%d", __FUNCTION__, pClient->_err_msg.c_str(), pClient->_connect_ip.c_str(), pClient->_connect_port);
 			if(pClient->_is_connecting)
 			{
 				uv_timer_stop(&pClient->_connect_timer);	
@@ -235,13 +236,13 @@ namespace UVNET
 		if(iret)
 		{
 			pClient->_err_msg = GetUVError(status);
-			log_error("%s|read failed|%s", __FUNCTION__, pClient->_err_msg.c_str());
+			LOG_ERROR("%s|read failed|%s", __FUNCTION__, pClient->_err_msg.c_str());
 			pClient->_connect_status = CONNECT_ERROR;
 		}
 		else
 		{
 			pClient->_connect_status = CONNECT_FINISH;
-			log_info("client connect success");
+			LOG_TRACE("client connect success");
 		}
 		if(pClient->_is_connecting)
 		{
@@ -254,7 +255,7 @@ namespace UVNET
 	{
 		if(!data || len <= 0)
 		{
-			log_info("send data is null or less than 0");
+			LOG_TRACE("send data is null or less than 0");
 			return 0;
 		}
 		uv_async_send(&_async_handle);
@@ -311,15 +312,15 @@ namespace UVNET
 			if(!pClient->StartReconnect())	return;
 			if(nread == UV_EOF)
 			{
-				log_info("server closed(EOF)");
+				LOG_TRACE("server closed(EOF)");
 			}
 			else if(nread == UV_ECONNRESET)
 			{
-				log_info("server closed(RESET)");
+				LOG_TRACE("server closed(RESET)");
 			}
 			else
 			{
-				log_info("server closed(%s)", GetUVError(nread));
+				LOG_TRACE("server closed(%s)", GetUVError(nread));
 			}
 			uv_close((uv_handle_t *)handle, OnClientClose);
 			return;
@@ -343,7 +344,7 @@ namespace UVNET
 				pClient->_avail_params.push_back((ClientWriteParam *)req);
 			}
 			uv_mutex_unlock(&mutex_params);
-			log_error("send error|%s", GetUVError(status));
+			LOG_ERROR("send error|%s", GetUVError(status));
 			return;
 		}
 		pClient->_send(req);
@@ -364,7 +365,7 @@ namespace UVNET
 			if(iret)
 			{
 				uv_close((uv_handle_t *)&pClient->_connect_timer, TCPClient::OnClientClose)
-				log_error("%s|read failed|%s", __FUNCTION__, GetUVError(iret));
+				LOG_ERROR("%s|read failed|%s", __FUNCTION__, GetUVError(iret));
 				return;
 			}
 		}
@@ -443,7 +444,7 @@ namespace UVNET
 					_avail_params.push_back(param);
 				}
 				uv_mutex_unlock(&_mutex_params);
-				log_error("client send data error|%s", GetUVError(iret));
+				LOG_ERROR("client send data error|%s", GetUVError(iret));
 			}
 		}	// end of while
 	}
@@ -475,13 +476,13 @@ namespace UVNET
 	{
 		TCPClient* pClient = (TCPClient *)handle->data;
 		if(!pClient->_is_connecting) return;
-		log_info("start reconnect...");
+		LOG_TRACE("start reconnect...");
 		do
 		{
 			int iret = uv_tcp_init(&pClient->_loop, &pClient->_ctx->tcp_handle);
 			if(iret)
 			{
-				log_error("%s|init tcp failed|%s", __FUNCTION__, GetUVError(iret));
+				LOG_ERROR("%s|init tcp failed|%s", __FUNCTION__, GetUVError(iret));
 				break;
 			}
 			pClient->_ctx->tcp_handle.data = pClient->_ctx;
@@ -491,7 +492,7 @@ namespace UVNET
 			if(iret)
 			{
 				_err_msg = GetUVError(iret);
-				log_error("%s|ip or port invalid|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
+				LOG_ERROR("%s|ip or port invalid|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
 				uv_close((uv_handle_t *)&pClient->_ctx->tcp_handle, NULL);
 				break;
 			}
@@ -501,7 +502,7 @@ namespace UVNET
 			if(iret)
 			{
 				_err_msg = GetUVError(iret);
-				log_error("%s|reconnect failed|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
+				LOG_ERROR("%s|reconnect failed|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
 				uv_close((uv_handle_t *)&pClient->_ctx->tcp_handle, NULL);
 				break;
 			}

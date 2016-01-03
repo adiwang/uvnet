@@ -18,25 +18,25 @@ TCPServer::TCPServer(unsigned char pack_head, unsigned char pack_tail)
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|init loop failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|init loop failed|%s", __FUNCTION__, _err_msg.c_str());
 	}
 	iret = uv_mutex_init(&_mutex_sessions);
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|init sessions mutex failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|init sessions mutex failed|%s", __FUNCTION__, _err_msg.c_str());
 	}
 	iret = uv_mutex_init(&_mutex_ctxs);
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|init session ctx mutex failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|init session ctx mutex failed|%s", __FUNCTION__, _err_msg.c_str());
 	}
 	iret = uv_mutex_init(&_mutex_params);
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|init write param mutex failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|init write param mutex failed|%s", __FUNCTION__, _err_msg.c_str());
 	}
 }
 
@@ -59,7 +59,7 @@ TCPServer::~TcpServer()
 		WriteParam::Release(*it);
 	}
 	_avail_params.clear();
-	log_info("tcp server exit");
+	LOG_TRACE("tcp server exit");
 }
 
 bool TCPServer::_init()
@@ -69,7 +69,7 @@ bool TCPServer::_init()
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|init async close handle failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|init async close handle failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
 	_async_close_handle.data = this;
@@ -78,7 +78,7 @@ bool TCPServer::_init()
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|init tcp handle failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|init tcp handle failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
 	_tcp_handle.data = this;
@@ -87,7 +87,7 @@ bool TCPServer::_init()
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|set tcp handle nodelay failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|set tcp handle nodelay failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
 	_is_closed = false;
@@ -105,7 +105,7 @@ void TCPServer::_close()
 	}
 	uv_mutex_unlock(&_mutex_sessions);
 	uv_walk(&_loop, CloseWalkCB, this);
-	log_info("close server");
+	LOG_TRACE("close server");
 }
 
 bool TCPServer::_run(int status)
@@ -114,10 +114,10 @@ bool TCPServer::_run(int status)
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|run loop failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|run loop failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
-	log_info("server runing");
+	LOG_TRACE("server runing");
 	return true;
 }
 
@@ -128,17 +128,17 @@ bool TCPServer::_bind(const char *ip, int port)
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|ip or port error|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
+		LOG_ERROR("%s|ip or port error|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
 		return false;
 	}
 	iret = uv_tcp_bind(&_tcp_handle, (const struct sockaddr*)&bind_addr, 0);
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|bind failed|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
+		LOG_ERROR("%s|bind failed|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
 		return false;
 	}
-	log_info("server bind ip=%s, port=%d", ip, port);
+	LOG_TRACE("server bind ip=%s, port=%d", ip, port);
 	return true;
 }
 
@@ -148,10 +148,10 @@ bool TCPServer::_listen(int backlog)
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|listen failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|listen failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
-	log_info("server start listening");
+	LOG_TRACE("server start listening");
 	return true;
 }
 
@@ -167,7 +167,7 @@ bool TCPServer::Start(const char* ip, int port)
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|create start thread failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|create start thread failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
 	int retry_count = 0;
@@ -196,7 +196,7 @@ bool TCPServer::SetNoDelay(bool enable)
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|set tcp no delay failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|set tcp no delay failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
 	return true;
@@ -208,7 +208,7 @@ bool TCPServer::SetKeepAlive(int enable, unsigned int delay)
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
-		log_error("%s|set tcp no delay failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|set tcp no delay failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
 	return true;
@@ -222,7 +222,7 @@ void TCPServer::_start_thread(void *arg)
 	// the server is close when come here
 	instance->_is_closed = true;
 	instance->_is_user_closed = false;
-	log_info("server had closed");
+	LOG_TRACE("server had closed");
 	if(instance->_close_cb)
 	{
 		instance->_close_cb(-1, instance->_close_userdata);
@@ -283,7 +283,7 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	if(status)
 	{
 		server_instance->_err_msg = GetUVError(status);
-		log_error("%s|on connection status abnormal|%s|%d", __FUNCTION__, _err_msg.c_str(), status);
+		LOG_ERROR("%s|on connection status abnormal|%s|%d", __FUNCTION__, _err_msg.c_str(), status);
 		return;
 	}
 	
@@ -293,7 +293,7 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	{
 		server_instance->_recycle_one_ctx(ctx);
 		server_instance->_err_msg = GetUVError(iret);
-		log_error("%s|on connection init new tcp handle failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|on connection init new tcp handle failed|%s", __FUNCTION__, _err_msg.c_str());
 		return;
 	}
 	ctx->tcp_handle.data = ctx;
@@ -305,7 +305,7 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	{
 		server_instance->_recycle_one_ctx(ctx);
 		server_instance->_err_msg = GetUVError(iret);
-		log_error("%s|accept failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|accept failed|%s", __FUNCTION__, _err_msg.c_str());
 		return;
 	}
 
@@ -322,7 +322,7 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	{
 		uv_close((uv_handle_t *)&ctx->tcp_handle, TCPServer::RecycleSessionCtx);
 		server_instance->_err_msg = GetUVError(iret);
-		log_error("%s|start read failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|start read failed|%s", __FUNCTION__, _err_msg.c_str());
 		return;
 	}
 
@@ -338,7 +338,7 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 		server_instance->_new_conn_cb(sid, server_instance->_new_conn_userdata);
 	}
 
-	log_info("new connect client|%d|%s", sid, ctx->client_ip);
+	LOG_TRACE("new connect client|%d|%s", sid, ctx->client_ip);
 }
 
 void TCPServer::_recycle_one_ctx(SessionCtx* ctx)
@@ -414,7 +414,7 @@ void TCPServer::SessionClosed(int sid, void *userdata)
 		if(server->_close_cb) server->_close_cb(sid, server->_close_userdata);
 		server->_recycle_one_ctx(it->second->GetCtx());
 
-		log_info("session closed|%d|%s", sid, it->second->GetCtx()->client_ip);
+		LOG_TRACE("session closed|%d|%s", sid, it->second->GetCtx()->client_ip);
 		delete it->second;
 		server->_sessions.erase(it);
 	}
@@ -437,7 +437,7 @@ bool TCPServer::_send(const std::string& data, SessionCtx* ctx)
 {
 	if(data.empty())
 	{
-		log_info("send data is empty|%d", sid);
+		LOG_TRACE("send data is empty|%d", sid);
 		return true;
 	}
 	WriteParam* param = NULL;
@@ -455,17 +455,22 @@ bool TCPServer::_send(const std::string& data, SessionCtx* ctx)
 	{
 		_recycle_one_param(param);
 		_err_msg = GetUVError(iret);
-		log_error("%s|send data failed|%s|%d", __FUNCTION__, _err_msg.c_str(), ctx->sid);
+		LOG_ERROR("%s|send data failed|%s|%d", __FUNCTION__, _err_msg.c_str(), ctx->sid);
 		return false;
 	}
 	return true;
+}
+
+bool TCPServer::StartLog(int log_level, const char* module_name, const char* log_dir)
+{
+	return log_init(log_level, module_name, log_dir);
 }
 
 bool TCPServer::_broadcast(const std::string& data, std::vector<int> exclude_ids)
 {
 	if(data.empty())
 	{
-		log_info("broadcast data is empty");
+		LOG_TRACE("broadcast data is empty");
 		return true;
 	}
 	
@@ -529,7 +534,7 @@ void Session::_session_close(uv_handle_t* handle)
 	if(handle == (uv_handle_t *)&session->ctx->tcp_handle)
 	{
 		session->_is_closed = true;
-		log_info("session closed|%d", session->ctx->sid);
+		LOG_TRACE("session closed|%d", session->ctx->sid);
 		if(session->_close_cb)	session->_close_cb(session->ctx->sid, session->_close_userdata);
 	}
 }
