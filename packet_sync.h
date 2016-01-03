@@ -20,8 +20,8 @@ packet.Start(0x01,0x02);
 #define PACKET_SYNC_H
 #include <algorithm>
 #include <openssl/md5.h>
-#include "net/net_base.h"
-#include "sys/thread_uv.h"//for GetUVError
+#include "net_base.h"
+#include "thread_uv.h"//for GetUVError
 #if defined (WIN32) || defined(_WIN32)
 #include <windows.h>
 #define ThreadSleep(ms) Sleep(ms);//睡眠ms毫秒

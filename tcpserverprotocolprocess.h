@@ -8,6 +8,7 @@
 #ifndef TCP_SERVER_PROTOCOL_PROCESS_H
 #define TCP_SERVER_PROTOCOL_PROCESS_H
 #include <string>
+#include "net_base.h"
 
 class TCPServerProtocolProcess
 {

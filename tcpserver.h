@@ -3,8 +3,11 @@
 #include <string>
 #include <map>
 #include <list>
+#include <vector>
 #include "uv.h"
 #include "tcpserverprotocolprocess.h"
+#include "net_base.h"
+#include "packet_sync.h"
 
 #ifndef BUFFER_SIZE
 #define BUFFER_SIZE (1024 * 10)
@@ -42,7 +45,7 @@ public:
 	TCPServer(unsigned char pack_head, unsigned char pack_tail);
 	virtual ~TCPServer();
 	// Start/Stop the log
-	static bool StartLog(LogLevel l, const char* p_modulename, const char* p_logdir);
+	static bool StartLog(int log_level, const char* module_name, const char* log_dir);
 	// static void StopLog();
 
 	void SetNewConnectCB(NewConnectCB cb, void *userdata);
@@ -77,7 +80,7 @@ private:
 	bool _listen(int backlog = SOMAXCONN);
 	bool _send(const std::string& data, SessionCtx* ctx);
 	bool _broadcast(const std::string& data, std::vector<int> exclude_ids);
-	static _start_thread(void *arg);
+	static void _start_thread(void *arg);
 	SessionCtx* _fetch_one_ctx();
 	void _recycle_one_ctx(SessionCtx* ctx);
 	WriteParam* _fetch_one_param();
