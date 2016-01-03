@@ -71,8 +71,8 @@ private:
 	void _close();
 	bool _run(int status = UV_RUN_DEFAULT);
 	void _send(uv_write_t* req = NULL);
-	bool _start_connect();
-	void _stop_connect();
+	bool _start_reconnect();
+	void _stop_reconnect();
 
 private:
 	enum
