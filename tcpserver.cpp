@@ -1,4 +1,5 @@
 #include "tcpserver.h"
+#include "log.h"
 
 #include <cassert>
 #include <arpa/inet.h>
