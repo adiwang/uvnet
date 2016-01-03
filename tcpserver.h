@@ -4,6 +4,7 @@
 #include <map>
 #include <list>
 #include "uv.h"
+#include "tcpserverprotocolprocess.h"
 
 #ifndef BUFFER_SIZE
 #define BUFFER_SIZE (1024 * 10)
@@ -55,6 +56,7 @@ public:
 	bool SetNoDelay(bool enable);
 	bool SetKeepAlive(int enable, unsigned int delay);
 	const char* GetLastErrMsg() const { return _err_msg.c_str(); }
+	void SetProtocol(TCPServerProtocolProcess* proto);
 
 protected:
 	virtual int GenerateSessionID() const;
@@ -122,6 +124,8 @@ private:
 	std::list<WriteParam*>	_avail_params;
 	uv_mutex_t	_mutex_params;
 
+	TCPServerProtocolProcess* _protocol;
+
 public:
 	friend static void AllocBufferForRecv(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
 	friend static void OnRecv(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
@@ -164,6 +168,11 @@ public:
 	friend static void GetPacket(const NetPacket& packethead, const unsigned char *packetdata, void *userdata);
 };
 
+// Global Function
+static void AllocBufferForRecv(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+static void OnRecv(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf);
+static void OnSend(uv_write_t* req, int status);
+static void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, void* userdata);
 }	// end of namespace UVNET
 
 #endif

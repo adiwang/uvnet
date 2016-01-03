@@ -215,6 +215,11 @@ bool TCPServer::SetKeepAlive(int enable, unsigned int delay)
 	return true;
 }
 
+void TCPServer::SetProtocol(TCPServerProtocolProcess* proto)
+{
+	_protocol = proto;
+}
+
 void TCPServer::_start_thread(void *arg)
 {
 	TCPServer *instance = (TCPServer *)arg;
@@ -601,5 +606,65 @@ void WriteParam::Release(WriteParam* param)
 	free(param);
 }
 
+/************************************************ Global Function ***********************************************/
+
+void AllocBufferForRecv(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf)
+{
+	SessionCtx* ctx = (SessionCtx *)handle->data;
+	assert(ctx);
+	*buf = ctx->read_buf;
+}
+
+void OnRecv(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf)
+{
+	SessionCtx* ctx = (SessionCtx *)handle->data;
+	assert(ctx);
+	if(nread < 0)
+	{
+		if(nread == UV_EOF)
+		{
+			LOG_ERROR("client recv eof|%d", ctx->sid);
+		}
+		else if(nread == UV_ECONNRESET)
+		{
+			LOG_ERROR("client recv conn reset|%d", ctx->sid);
+		}
+		else
+		{
+			LOG_ERROR("client recv error|%d|%s", ctx->sid, GetUVError(nread));
+		}
+		Session* session = (Session *)ctx->parent_session;
+		session->Close();
+		return;
+	}
+	else if (nread == 0)
+	{
+		// everything ok
+	}
+	else
+	{
+		ctx->packet->recvdata((const unsigned char *)buf->base, nread);
+	}
+}
+
+void OnSend(uv_write_t* req, int status)
+{
+	SessionCtx* ctx = (SessionCtx *)req->data;
+	TCPServer* server = (TCPServer *)ctx->parent_server;
+	server->_recycle_one_param(WriteParam* param);
+	if(status < 0)
+	{
+		LOG_ERROR("send data error|%d", ctx->sid);
+	}
+}
+
+void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, void* userdata)
+{
+	assert(userdata);
+	SessionCtx* ctx = (SessionCtx *)userdata;
+	TCPServer* server = (TCPServer*)ctx->parent_server;
+	const std::string& send_data = server->_protocol->ParsePacket(packethead, packetdata);
+	server->_send(senddata, ctx);
+}
 
 }	// end of namespace UVNET
