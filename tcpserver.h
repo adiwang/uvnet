@@ -104,7 +104,7 @@ private:
 	std::map<int/*session id*/, Session* /*session*/> _sessions;
 	uv_mutex_t	_mutex_sessions;
 
-	// TCPServerProtocolProcess*	_protocol;
+	TCPServerProtocolProcess*	_protocol;
 	uv_thread_t	_start_thread_handle;
 	int			_start_status;
 	std::string	_err_msg;
@@ -127,8 +127,6 @@ private:
 	std::list<WriteParam*>	_avail_params;
 	uv_mutex_t	_mutex_params;
 
-	TCPServerProtocolProcess* _protocol;
-
 public:
 	friend static void AllocBufferForRecv(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
 	friend static void OnRecv(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
@@ -136,6 +134,7 @@ public:
 	friend static void GetPacket(const NetPacket& packethead, const unsigned char *packetdata, void *userdata);
 };
 
+// TODO: 其实这个Session类比较累赘，可以考虑干掉，只用SessionCtx即可
 class Session
 {
 public:
@@ -176,6 +175,7 @@ static void AllocBufferForRecv(uv_handle_t* handle, size_t suggested_size, uv_bu
 static void OnRecv(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf);
 static void OnSend(uv_write_t* req, int status);
 static void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, void* userdata);
+
 }	// end of namespace UVNET
 
 #endif

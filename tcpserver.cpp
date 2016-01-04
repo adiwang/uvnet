@@ -13,7 +13,7 @@ TCPServer::TCPServer(unsigned char pack_head, unsigned char pack_tail)
 	: _pack_head(pack_head), _pack_tail(pack_tail)
 	, _new_conn_cb(nullptr), _new_conn_userdata(nullptr), _close_cb(nullptr), _close_userdata(nullptr)
 	, _is_closed(true), _is_user_closed(false)
-	, _start_status(START_DIS)/*, _protocol(NULL)*/
+	, _start_status(START_DIS), _protocol(NULL)
 {
 	int iret = uv_loop_init(&_loop);
 	if(iret)
@@ -49,13 +49,13 @@ TCPServer::~TcpServer()
 	uv_mutex_destroy(&_mutex_ctxs);
 	uv_mutex_destroy(&_mutex_params);
 	uv_loop_close(&_loop);
-	for(auto it = _avail_ctxs.begin(); it != _avail_ctxs.end(); ++it)
+	for(std::list<SessionCtx*>::iterator it = _avail_ctxs.begin(); it != _avail_ctxs.end(); ++it)
 	{
 		SessionCtx::Release(*it);
 	}
 	_avail_ctxs.clear();
 	
-	for(auto it = _avail_params.begin(); it != _avail_params.end(); ++it)
+	for(std::list<WriteParam*>::iterator it = _avail_params.begin(); it != _avail_params.end(); ++it)
 	{
 		WriteParam::Release(*it);
 	}
@@ -63,6 +63,10 @@ TCPServer::~TcpServer()
 	LOG_TRACE("tcp server exit");
 }
 
+/**
+**	初始化函数
+**	@return: true, 成功; false, 失败
+*/
 bool TCPServer::_init()
 {
 	if(!_is_closed)	return true;
@@ -95,13 +99,17 @@ bool TCPServer::_init()
 	return true;
 }
 
+/**
+**	真正的关闭函数
+**	关闭同server连接的每个session并关闭ioloop中的每个handle
+*/
 void TCPServer::_close()
 {
 	if(_is_closed) return;
 	uv_mutex_lock(&_mutex_sessions);
-	for(auto it = _sessions.begin(); it != _sessions.end*(); ++it)
+	for(std::map<int, Session*>::iterator it = _sessions.begin(); it != _sessions.end*(); ++it)
 	{
-		auto session = it->second;
+		Session* session = it->second;
 		session->Close();
 	}
 	uv_mutex_unlock(&_mutex_sessions);
@@ -109,6 +117,11 @@ void TCPServer::_close()
 	LOG_TRACE("close server");
 }
 
+/**
+**	启动事件循环
+**	@status: 运行模式
+**	@return: true,成功; false, 失败
+*/
 bool TCPServer::_run(int status)
 {
 	int iret = uv_run(&_loop, (uv_run_mode)status);
@@ -122,6 +135,12 @@ bool TCPServer::_run(int status)
 	return true;
 }
 
+/**
+**	绑定ip和端口
+**	@ip: ip地址
+**	@port: 端口
+**  @return: true, 绑定成功; false, 绑定失败
+*/
 bool TCPServer::_bind(const char *ip, int port)
 {
 	struct sockaddr_in bind_addr;
@@ -143,6 +162,11 @@ bool TCPServer::_bind(const char *ip, int port)
 	return true;
 }
 
+/**
+**	监听函数
+**	@backlog: 最大队列连接数
+**  @return: true, 监听成功; false, 监听失败
+*/
 bool TCPServer::_listen(int backlog)
 {
 	int iret = uv_listen((uv_stream_t*)&_tcp_handle, backlog, OnConnection);
@@ -156,14 +180,22 @@ bool TCPServer::_listen(int backlog)
 	return true;
 }
 
+/**
+**	启动server
+**	@ip: ip
+**	@port: 端口
+**  @return: true, 启动成功; false, 启动失败
+*/
 bool TCPServer::Start(const char* ip, int port)
 {
 	_server_ip = ip;
 	_server_port = port;
+	// 先调用_close确保server是关闭的
 	_close();
 	if(!_init()) return false;
 	if(!_bind(ip, port)) return false;
 	if(!_listen()) return false;
+	// 单独创建一个启动线程用来启动事件循环
 	int iret = uv_thread_create(&_start_thread_handle, _start_thread, this);
 	if(iret)
 	{
@@ -171,6 +203,7 @@ bool TCPServer::Start(const char* ip, int port)
 		LOG_ERROR("%s|create start thread failed|%s", __FUNCTION__, _err_msg.c_str());
 		return false;
 	}
+	// 等待启动是否成功，如果启动成功会在启动线程中将_start_status设为START_FINISH
 	int retry_count = 0;
 	while(_start_status == START_DIS)
 	{
@@ -184,6 +217,9 @@ bool TCPServer::Start(const char* ip, int port)
 	return _start_status == START_FINISH;
 }
 
+/**
+**	关闭server
+*/
 void TCPServer::Close()
 {
 	if(_is_closed)	return;
@@ -191,6 +227,11 @@ void TCPServer::Close()
 	uv_async_send(&_async_close_handle);
 }
 
+/**
+**	开启或关闭 Nagle 算法，在服务启动后方可调用
+**  @enable: 1是启动，0是禁止
+**  @return: true, 设置成功; false, 设置失败
+*/
 bool TCPServer::SetNoDelay(bool enable)
 {
 	int iret = uv_tcp_nodelay(&_tcp_handle, enable ? 1 : 0);
@@ -203,6 +244,12 @@ bool TCPServer::SetNoDelay(bool enable)
 	return true;
 }
 
+/**
+**	开启或关闭 KeepAlive，在服务启动后方可调用
+**  @enable: 1是启动，0是禁止
+**  @delay: 延时多少秒发送KeepAlive，当enable为0时忽略此值
+**  @return: true, 设置成功; false, 设置失败
+*/
 bool TCPServer::SetKeepAlive(int enable, unsigned int delay)
 {
 	int iret = uv_tcp_keepalive(&_tcp_handle, enable, delay);
@@ -215,17 +262,25 @@ bool TCPServer::SetKeepAlive(int enable, unsigned int delay)
 	return true;
 }
 
+/**
+**	设置server的处理协议
+**  @proto: 协议处理实例
+*/
 void TCPServer::SetProtocol(TCPServerProtocolProcess* proto)
 {
 	_protocol = proto;
 }
 
+/**
+**	线程函数
+**  @arg: TCPServer类型指针
+*/
 void TCPServer::_start_thread(void *arg)
 {
 	TCPServer *instance = (TCPServer *)arg;
 	instance->_start_status = START_FINISH;
-	instance->run();
-	// the server is close when come here
+	instance->_run();
+	// 当运行到下面时说明已经close
 	instance->_is_closed = true;
 	instance->_is_user_closed = false;
 	LOG_TRACE("server had closed");
@@ -235,22 +290,38 @@ void TCPServer::_start_thread(void *arg)
 	}
 }
 
+/**
+**	设置连接回调函数
+**  @cb: 连接回调函数
+**  @userdata: 连接回调参数
+*/
 void TCPServer::SetNewConnectCB(NewConnectCB cb, void *userdata)
 {
 	_new_conn_cb = cb;
 	_new_conn_userdata = userdata;
 }
 
+/**
+**	设置关闭回调函数
+**  @cb: 关闭回调函数
+**  @userdata: 关闭回调参数
+*/
 void TCPServer::SetCloseCB(TcpCloseCB cb, void *userdata)
 {
 	_close_cb = cb;
 	_close_userdata = userdata;
 }
 
+/**
+**	设置指定session的接收数据回调函数
+**	@sid: session id
+**  @cb: 接收数据回调函数
+**  @userdata: 接收数据回调参数
+*/
 void TCPServer::SetRecvCB(int sid, ServerRecvCB cb, void *userdata)
 {
 	uv_mutex_lock(&_mutex_sessions);
-	auto it = _sessions.find(sid);
+	std::map<int, Session*>::iterator it = _sessions.find(sid);
 	if(it != _sessions.end())
 	{
 		it->second->SetRecvCB(cb, userdata);
@@ -258,22 +329,38 @@ void TCPServer::SetRecvCB(int sid, ServerRecvCB cb, void *userdata)
 	uv_mutex_unlock(&_mutex_sessions);
 }
 
+/**
+**	生成session id
+**  @return: session id
+*/
 int TCPServer::GenerateSessionID()
 {
 	static int s_id = 0;
 	return ++s_id;
 }
 
+/**
+**	服务器关闭回调函数
+**	@handle: data域中存放着TCPServer*
+*/
 void TCPServer::AfterServerClose(uv_handle_t* handle)
 {
 }
 
+/**
+**	删除TCP连接
+**	@handle: data域中存放着SessionCtx*
+*/
 void TCPServer::DeleteTcpHandle(uv_handle_t* handle)
 {
 	SessionCtx* ctx = (SessionCtx *)handle->data;
 	SessionCtx::Release(ctx);
 }
 
+/**
+**	回收SessionCtx
+**	@handle: data域中存放着SessionCtx*
+*/
 void TCPServer::RecycleSessionCtx(uv_handle_t* handle)
 {
 	SessionCtx* ctx = (SessionCtx *)handle->data;
@@ -282,6 +369,11 @@ void TCPServer::RecycleSessionCtx(uv_handle_t* handle)
 	server->_recycle_one_ctx(ctx);
 }
 
+/**
+**	接收连接回调函数, 在_listen中调用uv_listen设置
+**	@server: data域中存放着TCPServer*
+**  @status: 状态异常码
+*/
 void TCPServer::OnConnection(uv_stream_t* server, int status)
 {
 	TCPServer* server_instance = (TCPServer *)server->data;
@@ -347,8 +439,13 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	LOG_TRACE("new connect client|%d|%s", sid, ctx->client_ip);
 }
 
+/**
+**	回收一个SessionCtx
+**	@ctx: 待回收的ctx
+*/
 void TCPServer::_recycle_one_ctx(SessionCtx* ctx)
 {
+	// 如果空闲列表超限，则释放掉，否则加到空闲列表中
 	uv_mutex_lock(&_mutex_ctxs);
 	if(_avail_ctxs.size() > MAXLISTSIZE)
 	{
@@ -361,8 +458,13 @@ void TCPServer::_recycle_one_ctx(SessionCtx* ctx)
 	uv_mutex_unlock(&_mutex_ctxs);
 }
 
+/**
+**	获取一个SessionCtx
+**	@return: 获取的ctx
+*/
 SessionCtx* TCPServer::_fetch_one_ctx()
 {
+	// 如果空闲列表为空，则分配一个，否则取空闲列表的第一个
 	SessionCtx* ctx = NULL;
 	uv_mutex_lock(&_mutex_ctxs);
 	if(_avail_ctxs.empty())
@@ -379,6 +481,10 @@ SessionCtx* TCPServer::_fetch_one_ctx()
 	return ctx;
 }
 
+/**
+**	获取一个WriteParam
+**	@return: 获取的param
+*/
 WriteParam* TCPServer::_fetch_one_param()
 {
 	WriteParam* param = NULL;
@@ -396,6 +502,10 @@ WriteParam* TCPServer::_fetch_one_param()
 	return param;
 }
 
+/**
+**	回收一个WriteParam
+**	@ctx: 待回收的param
+*/
 void TCPServer::_recycle_one_param(WriteParam* param)
 {
 	uv_mutex_lock(&_mutex_params);
@@ -410,11 +520,16 @@ void TCPServer::_recycle_one_param(WriteParam* param)
 	uv_mutex_unlock(&_mutex_params);
 }
 
+/**
+**	客户端断开连接回调函数
+**  @sid: session id
+**	@userdata: TCPServer
+*/
 void TCPServer::SessionClosed(int sid, void *userdata)
 {
 	TCPServer *server = (TCPServer *)userdata;
 	uv_mutex_lock(&server->mutex_sessions);
-	auto it = server->_sessions.find(sid);
+	std::map<int, Session*>::iterator it = server->_sessions.find(sid);
 	if(it != server->_sessions.end())
 	{
 		if(server->_close_cb) server->_close_cb(sid, server->_close_userdata);
@@ -427,18 +542,33 @@ void TCPServer::SessionClosed(int sid, void *userdata)
 	uv_mutex_unlock(&server->mutex_sessions);
 }
 
+/**
+**	服务端异步关闭回调函数
+**  @handle: data中存放TCPServer
+*/
 void TCPServer::AsyncCloseCB(uv_async_t* handle)
 {
 	TCPServer *server = (TCPServer *)handle->data;
 	if(server->_is_user_closed) server->_close();
 }
 
+/**
+**	walk遍历关闭回调，关闭每一个handle
+**  @handle: 待关闭的handle
+**  @arg: TCPServer
+*/
 void TCPServer::CloseWalkCB(uv_handle_t* handle, void *arg)
 {
 	TCPServer *server = (TCPServer *)arg;
 	if(!uv_is_closing(handle)) uv_close(handle, AfterServerClose);
 }
 
+/**
+**	真正的发送数据的函数
+**  @data: 待发送的数据
+**  @ctx: 连接session的上下文
+**	@return: true, 发送成功; false, 发送失败
+*/
 bool TCPServer::_send(const std::string& data, SessionCtx* ctx)
 {
 	if(data.empty())
@@ -446,6 +576,7 @@ bool TCPServer::_send(const std::string& data, SessionCtx* ctx)
 		LOG_TRACE("send data is empty|%d", sid);
 		return true;
 	}
+	// 分配一个WriteParam，如果buf空间小于数据长度则重新分配buf
 	WriteParam* param = NULL;
 	param = _fetch_one_param();
 	if(param->buf_true_len < data.length())
@@ -467,11 +598,24 @@ bool TCPServer::_send(const std::string& data, SessionCtx* ctx)
 	return true;
 }
 
+/**
+**	调用Clog的init
+**  @log_level: 日志级别
+**  @module_name: 模块名
+**	@log_dir: 日志目录
+**  @return: true, 成功; false, 失败
+*/
 bool TCPServer::StartLog(int log_level, const char* module_name, const char* log_dir)
 {
 	return log_init(log_level, module_name, log_dir);
 }
 
+/**
+**	广播
+**  @data: 要发送的数据
+**  @exclude_ids: 要排除的session id列表
+**  @return: true, 成功; false, 失败
+*/
 bool TCPServer::_broadcast(const std::string& data, std::vector<int> exclude_ids)
 {
 	if(data.empty())
@@ -485,7 +629,7 @@ bool TCPServer::_broadcast(const std::string& data, std::vector<int> exclude_ids
 	WriteParam *param = NULL;
 	if(exclude_ids.empty())
 	{
-		for(auto it = _sessions.begin(); it != _sessions.end(); ++it)
+		for(std::map<int, Session*>::iterator it = _sessions.begin(); it != _sessions.end(); ++it)
 		{
 			session = it->second;
 			_send(data, session->GetCtx());
@@ -493,9 +637,9 @@ bool TCPServer::_broadcast(const std::string& data, std::vector<int> exclude_ids
 	}
 	else
 	{
-		for(auto it = _sessions.begin(); it != _sessions.end(); ++it)
+		for(std::map<int, Session*>::iterator it = _sessions.begin(); it != _sessions.end(); ++it)
 		{
-			auto find_it = std::find(exclude_ids.begin(), exclude_ids.end(), it->first);
+			std::vector<int>::iterator find_it = std::find(exclude_ids.begin(), exclude_ids.end(), it->first);
 			if(find_it != exclude_ids.end())
 			{
 				exclude_ids.erase(find_it);
@@ -511,7 +655,7 @@ bool TCPServer::_broadcast(const std::string& data, std::vector<int> exclude_ids
 
 /***************************************** Session *******************************************************/
 Session::Session(SessionCtx* ctx, uv_loop_t* loop)
-	: _ctx(ctx), _sid(sid), _loop(loop), _is_closed(true), _recv_cb(nullptr), _recv_userdata(nullptr), _close_cb(nullptr), _close_userdata(nullptr)
+	: _ctx(ctx), _loop(loop), _is_closed(true), _recv_cb(nullptr), _recv_userdata(nullptr), _close_cb(nullptr), _close_userdata(nullptr)
 {
 	_init();
 }
@@ -525,6 +669,10 @@ Session::~Session()
 	}
 }
 
+/**
+**	session的初始化函数
+**	@return: true, 成功; false, 失败
+*/
 bool Session::_init()
 {
 	if(!_is_closed)	return true;
@@ -533,6 +681,11 @@ bool Session::_init()
 	return true;
 }
 
+/**
+**	session的真正关闭函数
+**	在Close的uv_close中设置
+**	@handle: data中存放着Session*
+*/
 void Session::_session_close(uv_handle_t* handle)
 {
 	Session* session = (Session *)handle->data;
@@ -545,23 +698,40 @@ void Session::_session_close(uv_handle_t* handle)
 	}
 }
 
+/**
+**	设置接收数据的回调函数
+**	@cb: 回调函数
+**	@userdata: 参数
+*/
 void Session::SetRecvCB(ServerRecvCB cb, void* userdata)
 {
 	_recv_cb = cb;
 	_recv_userdata = userdata;
 }
 
+/**
+**	设置关闭连接的回调函数
+**	@cb: 回调函数
+**	@userdata: 参数
+*/
 void Session::SetCloseCB(TcpCloseCB cb, void* userdata)
 {
 	_close_cb = cb;
 	_close_userdata = userdata;
 }
 
+/**
+**	获取sesscion上下文
+**	@return: SessionCtx
+*/
 SessionCtx* Session::GetCtx() const
 {
 	return _ctx;
 }
 
+/**
+**	session的关闭函数
+*/
 void Session::Close()
 {
 	if(_is_closed)	return;
@@ -571,6 +741,11 @@ void Session::Close()
 
 /*********************************************** SessionCtx *****************************************************/
 
+/**
+**	分配SessionCtx
+**	@parent_server: 所属TCPServer
+**	@return: SessionCtx
+*/
 SessionCtx* SessionCtx::Alloc(void *parent_server)
 {
 	SessionCtx* ctx = (SessionCtx *)malloc(sizeof(SessionCtx));
@@ -583,6 +758,10 @@ SessionCtx* SessionCtx::Alloc(void *parent_server)
 	return ctx;
 }
 
+/**
+**	释放SessionCtx
+**	@ctx: 待释放的SessionCtx
+*/
 void SessionCtx::Release(SessionCtx* ctx)
 {
 	delete ctx->packet;
@@ -591,6 +770,11 @@ void SessionCtx::Release(SessionCtx* ctx)
 }
 
 /*********************************************** WriteParam *****************************************************/
+
+/**
+**	分配WriteParam
+**	@return: WriteParam
+*/
 WriteParam* WriteParam::Alloc()
 {
 	WriteParam* param = (WriteParam *)malloc(sizeof(WriteParam));
@@ -600,6 +784,10 @@ WriteParam* WriteParam::Alloc()
 	return param;
 }
 
+/**
+**	释放WriteParam
+**	@ctx: 待释放的param
+*/
 void WriteParam::Release(WriteParam* param)
 {
 	free(param->buf.base);
@@ -608,6 +796,12 @@ void WriteParam::Release(WriteParam* param)
 
 /************************************************ Global Function ***********************************************/
 
+/**
+**	uv_read的分配回调函数
+**	@handle: data存放SessionCtx
+**	@suggested_size: 建议大小
+**	@buf: 分配缓冲区
+*/
 void AllocBufferForRecv(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf)
 {
 	SessionCtx* ctx = (SessionCtx *)handle->data;
@@ -615,7 +809,13 @@ void AllocBufferForRecv(uv_handle_t* handle, size_t suggested_size, uv_buf_t* bu
 	*buf = ctx->read_buf;
 }
 
-void OnRecv(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf)
+/**
+**	接收数据回调函数，同样是uv_read中设置的
+**	@handle: data中存放的是SessionCtx
+**  @nread: 接收到的数据大小
+**	@buf: 接收数据的缓冲区
+*/
+void OnRecv(uv_stream_t* handle, ssize_t nread, const uv_buf_t* buf)
 {
 	SessionCtx* ctx = (SessionCtx *)handle->data;
 	assert(ctx);
@@ -643,14 +843,21 @@ void OnRecv(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf)
 	}
 	else
 	{
+		// 正常接收，调用解包函数来解包
 		ctx->packet->recvdata((const unsigned char *)buf->base, nread);
 	}
 }
 
+/**
+**	发送数据回调函数，_send()函数中调用uv_write设置的
+**	@req: data中存放的是SessionCtx
+**  @status: 发送的状态
+*/
 void OnSend(uv_write_t* req, int status)
 {
 	SessionCtx* ctx = (SessionCtx *)req->data;
 	TCPServer* server = (TCPServer *)ctx->parent_server;
+	// 完成发送后回收WriteParam
 	server->_recycle_one_param(WriteParam* param);
 	if(status < 0)
 	{
@@ -658,11 +865,18 @@ void OnSend(uv_write_t* req, int status)
 	}
 }
 
+/**
+**	当接收到一个完整的数据帧时的回调函数
+**	@packethead: 包头，定义在net_base中
+**  @packetdata: 真实的数据
+**	@userdata:	SessionCtx
+*/
 void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, void* userdata)
 {
 	assert(userdata);
 	SessionCtx* ctx = (SessionCtx *)userdata;
 	TCPServer* server = (TCPServer*)ctx->parent_server;
+	// 调用协议来解析数据包并返回相应的response
 	const std::string& send_data = server->_protocol->ParsePacket(packethead, packetdata);
 	server->_send(senddata, ctx);
 }
