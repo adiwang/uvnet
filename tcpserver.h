@@ -51,7 +51,7 @@ public:
 	void SetNewConnectCB(NewConnectCB cb, void *userdata);
 	void SetRecvCB(int sid, ServerRecvCB cb, void *userdata);
 	void SetCloseCB(TcpCloseCB cb, void *userdata);
-	// void SetProtocol(TCPServerProtocolProcess* proto);
+	void SetProtocol(TCPServerProtocolProcess* proto);
 
 	bool Start(const char* ip, int port);
 	void Close();
@@ -59,7 +59,6 @@ public:
 	bool SetNoDelay(bool enable);
 	bool SetKeepAlive(int enable, unsigned int delay);
 	const char* GetLastErrMsg() const { return _err_msg.c_str(); }
-	void SetProtocol(TCPServerProtocolProcess* proto);
 
 protected:
 	virtual int GenerateSessionID() const;
