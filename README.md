@@ -1,19 +1,17 @@
 # uvnet
 tcp server warpper use libuv
 
-Libraries have been installed in:
-   /usr/local/lib
+1. 安装libuv
+   (1) ./autogen.sh
+   (2) ./configure --prefix=/usr/local
+   (3) make
+   (4) make install
 
-If you ever happen to want to link against installed libraries
-in a given directory, LIBDIR, you must either use libtool, and
-specify the full pathname of the library, or use the `-LLIBDIR'
-flag during linking and do at least one of the following:
-   - add LIBDIR to the `LD_LIBRARY_PATH' environment variable
-     during execution
-   - add LIBDIR to the `LD_RUN_PATH' environment variable
-     during linking
-   - use the `-Wl,-rpath -Wl,LIBDIR' linker flag
-   - have your system administrator add LIBDIR to `/etc/ld.so.conf'
+2. 编译
+   由于libuv安装到了/usr/local下，因此uv.h在/usr/local/include, lib在/usr/local/lib
+   编译的时候需要-I/usr/local/include -L/usr/local/lib
 
-See any operating system documentation about shared libraries for
-more information, such as the ld(1) and ld.so(8) manual pages.`
+3. 链接
+   (1) export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+   (2) -lpthread -luv -lssl -lcrypto
+
