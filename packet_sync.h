@@ -269,10 +269,10 @@ typedef void (*ClientRecvCB)(const NetPacket& packethead, const unsigned char* b
 
 //网络事件类型
 typedef enum {
-    NET_EVENT_TYPE_RECONNECT = 0,  //与服务器自动重连成功事件
+    NET_EVENT_TYPE_CONNECT = 0,		//与服务器自动重连成功事件
     NET_EVENT_TYPE_DISCONNECT      //与服务器断开事件
 } NET_EVENT_TYPE;
-//TCPClient断线重连函数
-typedef void (*ReconnectCB)(NET_EVENT_TYPE eventtype, void* userdata);
+//TCPClient连接回调函数
+typedef void (*ConnectCB)(NET_EVENT_TYPE eventtype, void* userdata);
 
 #endif//PACKET_SYNC_H
