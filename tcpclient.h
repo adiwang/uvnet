@@ -73,6 +73,9 @@ private:
 	void _send(uv_write_t* req = NULL);
 	bool _start_reconnect();
 	void _stop_reconnect();
+	ClientWriteParam* _fetch_one_param();
+	void _recycle_one_param(ClientWriteParam* param);
+
 
 private:
 	enum
