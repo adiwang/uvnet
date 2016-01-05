@@ -2,6 +2,9 @@
 #include <string>
 #include "../tcpserver.h"
 #include "../net_base.h"
+#include "../tcpserverprotocolprocess.h"
+#include "../packet_sync.h"
+#include "../log.h"
 #include <cstdio>
 #include "uv.h"
 
@@ -25,7 +28,7 @@ private:
 };
 
 using namespace std;
-using namespace uv;
+using namespace UVNET;
 bool is_eist = false;
 int call_time = 0;
 
@@ -48,9 +51,9 @@ int main(int argc, char** argv)
 {
 	TestTCPProtocol protocol;
     // DeclareDumpFile();
-    TCPServer::StartLog(1, "tcpserver", "log/");
+    TCPServer::StartLog(LL_DEBUG, "tcpserver", "./log");
     server.SetNewConnectCB(NewConnect,&server);
-	server.SetPortocol(&protocol);
+	server.SetProtocol(&protocol);
     if(!server.Start("0.0.0.0",12345)) {
         fprintf(stdout,"Start Server error:%s\n",server.GetLastErrMsg());
     }
