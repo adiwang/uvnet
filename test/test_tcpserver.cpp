@@ -2,6 +2,9 @@
 #include <string>
 #include "../tcpserver.h"
 #include "../net_base.h"
+#include "../tcpserverprotocolprocess.h"
+#include "../net_base.h"
+#include "../packet_sync.h"
 #include <cstdio>
 #include "uv.h"
 
