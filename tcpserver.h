@@ -5,6 +5,7 @@
 #include <list>
 #include <vector>
 #include "uv.h"
+#include "log.h"
 #include "tcpserverprotocolprocess.h"
 #include "net_base.h"
 #include "packet_sync.h"
@@ -45,7 +46,7 @@ public:
 	TCPServer(unsigned char pack_head, unsigned char pack_tail);
 	virtual ~TCPServer();
 	// Start/Stop the log
-	static bool StartLog(int log_level, const char* module_name, const char* log_dir);
+	static bool StartLog(LogLevel log_level, const char* module_name, const char* log_dir);
 	// static void StopLog();
 
 	void SetNewConnectCB(NewConnectCB cb, void *userdata);
@@ -62,7 +63,7 @@ public:
 	void SetProtocol(TCPServerProtocolProcess* proto);
 
 protected:
-	virtual int GenerateSessionID() const;
+	static int GenerateSessionID();
 	
 	static void AfterServerClose(uv_handle_t* handle);
 	static void DeleteTcpHandle(uv_handle_t* handle);
@@ -81,7 +82,7 @@ private:
 	bool _send(const std::string& data, SessionCtx* ctx);
 	bool _broadcast(const std::string& data, std::vector<int> exclude_ids);
 	static void _start_thread(void *arg);
-	SessionCtx* _fetch_one_ctx();
+	SessionCtx* _fetch_one_ctx(TCPServer* server);
 	void _recycle_one_ctx(SessionCtx* ctx);
 	WriteParam* _fetch_one_param();
 	void _recycle_one_param(WriteParam* param);
@@ -128,10 +129,10 @@ private:
 	uv_mutex_t	_mutex_params;
 
 public:
-	friend static void AllocBufferForRecv(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
-	friend static void OnRecv(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
-	friend static void OnSend(uv_write_t *req, int status);
-	friend static void GetPacket(const NetPacket& packethead, const unsigned char *packetdata, void *userdata);
+	friend void AllocBufferForRecv(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
+	friend void OnRecv(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
+	friend void OnSend(uv_write_t *req, int status);
+	friend void GetPacket(const NetPacket& packethead, const unsigned char *packetdata, void *userdata);
 };
 
 // TODO: 其实这个Session类比较累赘，可以考虑干掉，只用SessionCtx即可
@@ -164,17 +165,17 @@ private:
 	void*		_close_userdata;
 
 public:
-	friend static void AllocBufferForRecv(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
-	friend static void OnRecv(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
-	friend static void OnSend(uv_write_t *req, int status);
-	friend static void GetPacket(const NetPacket& packethead, const unsigned char *packetdata, void *userdata);
+	friend void AllocBufferForRecv(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
+	friend void OnRecv(uv_stream_t *client, ssize_t nread, const uv_buf_t *buf);
+	friend void OnSend(uv_write_t *req, int status);
+	friend void GetPacket(const NetPacket& packethead, const unsigned char *packetdata, void *userdata);
 };
 
 // Global Function
-static void AllocBufferForRecv(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
-static void OnRecv(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf);
-static void OnSend(uv_write_t* req, int status);
-static void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, void* userdata);
+void AllocBufferForRecv(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+void OnRecv(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf);
+void OnSend(uv_write_t* req, int status);
+void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, void* userdata);
 
 }	// end of namespace UVNET
 
