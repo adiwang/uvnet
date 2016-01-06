@@ -41,11 +41,11 @@ TCPServer::TCPServer(unsigned char pack_head, unsigned char pack_tail)
 	}
 }
 
-TCPServer::~TcpServer()
+TCPServer::~TCPServer()
 {
 	Close();
 	uv_thread_join(&_start_thread_handle);
-	uv_mutex_destroy(&mutex_sessions);
+	uv_mutex_destroy(&_mutex_sessions);
 	uv_mutex_destroy(&_mutex_ctxs);
 	uv_mutex_destroy(&_mutex_params);
 	uv_loop_close(&_loop);
@@ -79,7 +79,7 @@ bool TCPServer::_init()
 	}
 	_async_close_handle.data = this;
 
-	iret = uv_tcp_init(&loop, &_tcp_handle);
+	iret = uv_tcp_init(&_loop, &_tcp_handle);
 	if(iret)
 	{
 		_err_msg = GetUVError(iret);
@@ -107,7 +107,7 @@ void TCPServer::_close()
 {
 	if(_is_closed) return;
 	uv_mutex_lock(&_mutex_sessions);
-	for(std::map<int, Session*>::iterator it = _sessions.begin(); it != _sessions.end*(); ++it)
+	for(std::map<int, Session*>::iterator it = _sessions.begin(); it != _sessions.end(); ++it)
 	{
 		Session* session = it->second;
 		session->Close();
@@ -381,17 +381,17 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	if(status)
 	{
 		server_instance->_err_msg = GetUVError(status);
-		LOG_ERROR("%s|on connection status abnormal|%s|%d", __FUNCTION__, _err_msg.c_str(), status);
+		LOG_ERROR("%s|on connection status abnormal|%s|%d", __FUNCTION__, server_instance->_err_msg.c_str(), status);
 		return;
 	}
 	
-	SessionCtx* ctx = server_instance->_fetch_one_ctx();	
-	int iret = uv_tcp_init(&server->instance->_loop, &ctx->tcp_handle);
+	SessionCtx* ctx = server_instance->_fetch_one_ctx(server_instance);	
+	int iret = uv_tcp_init(&server_instance->_loop, &ctx->tcp_handle);
 	if(iret)
 	{
 		server_instance->_recycle_one_ctx(ctx);
 		server_instance->_err_msg = GetUVError(iret);
-		LOG_ERROR("%s|on connection init new tcp handle failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|on connection init new tcp handle failed|%s", __FUNCTION__, server_instance->_err_msg.c_str());
 		return;
 	}
 	ctx->tcp_handle.data = ctx;
@@ -403,14 +403,14 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	{
 		server_instance->_recycle_one_ctx(ctx);
 		server_instance->_err_msg = GetUVError(iret);
-		LOG_ERROR("%s|accept failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|accept failed|%s", __FUNCTION__, server_instance->_err_msg.c_str());
 		return;
 	}
 
 	// get ip
 	struct sockaddr_in client_addr;
 	int client_addr_len = sizeof(client_addr);
-	uv_tcp_getsockname(ctx->tcp_handle, (struct sockaddr *)&client_addr, &client_addr_len);
+	uv_tcp_getsockname(&ctx->tcp_handle, (struct sockaddr *)&client_addr, &client_addr_len);
 	inet_ntop(AF_INET, &client_addr.sin_addr, ctx->client_ip, sizeof(ctx->client_ip));
 
 	ctx->packet->SetPacketCB(GetPacket, ctx);
@@ -420,7 +420,7 @@ void TCPServer::OnConnection(uv_stream_t* server, int status)
 	{
 		uv_close((uv_handle_t *)&ctx->tcp_handle, TCPServer::RecycleSessionCtx);
 		server_instance->_err_msg = GetUVError(iret);
-		LOG_ERROR("%s|start read failed|%s", __FUNCTION__, _err_msg.c_str());
+		LOG_ERROR("%s|start read failed|%s", __FUNCTION__, server_instance->_err_msg.c_str());
 		return;
 	}
 
@@ -462,14 +462,14 @@ void TCPServer::_recycle_one_ctx(SessionCtx* ctx)
 **	获取一个SessionCtx
 **	@return: 获取的ctx
 */
-SessionCtx* TCPServer::_fetch_one_ctx()
+SessionCtx* TCPServer::_fetch_one_ctx(TCPServer* server)
 {
 	// 如果空闲列表为空，则分配一个，否则取空闲列表的第一个
 	SessionCtx* ctx = NULL;
 	uv_mutex_lock(&_mutex_ctxs);
 	if(_avail_ctxs.empty())
 	{
-		ctx = SessionCtx::Alloc(server_instance);
+		ctx = SessionCtx::Alloc(server);
 	}
 	else
 	{
@@ -528,7 +528,7 @@ void TCPServer::_recycle_one_param(WriteParam* param)
 void TCPServer::SessionClosed(int sid, void *userdata)
 {
 	TCPServer *server = (TCPServer *)userdata;
-	uv_mutex_lock(&server->mutex_sessions);
+	uv_mutex_lock(&server->_mutex_sessions);
 	std::map<int, Session*>::iterator it = server->_sessions.find(sid);
 	if(it != server->_sessions.end())
 	{
@@ -539,7 +539,7 @@ void TCPServer::SessionClosed(int sid, void *userdata)
 		delete it->second;
 		server->_sessions.erase(it);
 	}
-	uv_mutex_unlock(&server->mutex_sessions);
+	uv_mutex_unlock(&server->_mutex_sessions);
 }
 
 /**
@@ -573,7 +573,7 @@ bool TCPServer::_send(const std::string& data, SessionCtx* ctx)
 {
 	if(data.empty())
 	{
-		LOG_TRACE("send data is empty|%d", sid);
+		LOG_TRACE("send data is empty|%d", ctx->sid);
 		return true;
 	}
 	// 分配一个WriteParam，如果buf空间小于数据长度则重新分配buf
@@ -605,7 +605,7 @@ bool TCPServer::_send(const std::string& data, SessionCtx* ctx)
 **	@log_dir: 日志目录
 **  @return: true, 成功; false, 失败
 */
-bool TCPServer::StartLog(int log_level, const char* module_name, const char* log_dir)
+bool TCPServer::StartLog(LogLevel log_level, const char* module_name, const char* log_dir)
 {
 	return log_init(log_level, module_name, log_dir);
 }
@@ -676,7 +676,7 @@ Session::~Session()
 bool Session::_init()
 {
 	if(!_is_closed)	return true;
-	ctx->parent_session = this;
+	_ctx->parent_session = this;
 	_is_closed = false;
 	return true;
 }
@@ -690,11 +690,11 @@ void Session::_session_close(uv_handle_t* handle)
 {
 	Session* session = (Session *)handle->data;
 	assert(session);
-	if(handle == (uv_handle_t *)&session->ctx->tcp_handle)
+	if(handle == (uv_handle_t *)&session->GetCtx()->tcp_handle)
 	{
 		session->_is_closed = true;
-		LOG_TRACE("session closed|%d", session->ctx->sid);
-		if(session->_close_cb)	session->_close_cb(session->ctx->sid, session->_close_userdata);
+		LOG_TRACE("session closed|%d", session->GetCtx()->sid);
+		if(session->_close_cb)	session->_close_cb(session->GetCtx()->sid, session->_close_userdata);
 	}
 }
 
@@ -735,8 +735,8 @@ SessionCtx* Session::GetCtx() const
 void Session::Close()
 {
 	if(_is_closed)	return;
-	ctx->tcp_handle.data = this;
-	uv_close((uv_handle_t *)&ctx->tcp_handle, _session_close);
+	_ctx->tcp_handle.data = this;
+	uv_close((uv_handle_t *)&_ctx->tcp_handle, _session_close);
 }
 
 /*********************************************** SessionCtx *****************************************************/
@@ -831,7 +831,7 @@ void OnRecv(uv_stream_t* handle, ssize_t nread, const uv_buf_t* buf)
 		}
 		else
 		{
-			LOG_ERROR("client recv error|%d|%s", ctx->sid, GetUVError(nread));
+			LOG_ERROR("client recv error|%d|%s", ctx->sid, GetUVError(nread).c_str());
 		}
 		Session* session = (Session *)ctx->parent_session;
 		session->Close();
@@ -858,7 +858,7 @@ void OnSend(uv_write_t* req, int status)
 	SessionCtx* ctx = (SessionCtx *)req->data;
 	TCPServer* server = (TCPServer *)ctx->parent_server;
 	// 完成发送后回收WriteParam
-	server->_recycle_one_param(WriteParam* param);
+	server->_recycle_one_param((WriteParam *)req);
 	if(status < 0)
 	{
 		LOG_ERROR("send data error|%d", ctx->sid);
@@ -878,7 +878,7 @@ void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, voi
 	TCPServer* server = (TCPServer*)ctx->parent_server;
 	// 调用协议来解析数据包并返回相应的response
 	const std::string& send_data = server->_protocol->ParsePacket(packethead, packetdata);
-	server->_send(senddata, ctx);
+	server->_send(send_data, ctx);
 }
 
 }	// end of namespace UVNET
