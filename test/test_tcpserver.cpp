@@ -15,8 +15,11 @@ public:
 	virtual ~TestTCPProtocol(){}
 	virtual const std::string& ParsePacket(const NetPacket& packet, const unsigned char* buf){
 		static char senddata[256];
-		sprintf(senddata,"****recv datalen %d",packet.datalen);
+		sprintf(senddata,"****recv datalen %d\n",packet.datalen);
 		fprintf(stdout,"%s\n",senddata);
+		for(int i = 0; i < packet.datalen; i++)
+			printf("%x ", buf[i]);
+		printf("\n");
 
 		NetPacket tmppack = packet;
 		tmppack.datalen = (std::min)(strlen(senddata),sizeof(senddata)-1);
