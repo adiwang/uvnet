@@ -1,6 +1,7 @@
 #include "tcpclient.h"
 #include "log.h"
 #define MAXLISTSIZE	20
+
 namespace UVNET
 {
 	/**************************************** TcpClientCtx *******************************************************/
@@ -57,7 +58,7 @@ namespace UVNET
 
 	/**************************************** TCPClient **********************************************************/
 	TCPClient::TCPClient(unsigned char pack_head, unsigned char pack_tail)
-		: _pack_head(pack_head), _pack_tail(pack_tail)
+		: _packet_head(pack_head), _packet_tail(pack_tail)
 		, _recv_cb(nullptr), _recv_userdata(nullptr), _close_cb(nullptr), _close_userdata(nullptr)
 		, _connect_cb(nullptr), _connect_userdata(nullptr)
 		, _connect_status(CONNECT_DIS), _write_circularbuf(BUFFER_SIZE)
@@ -124,10 +125,10 @@ namespace UVNET
 			LOG_ERROR("%s|init tcp handle failed|%s", __FUNCTION__, _err_msg.c_str());
 			return false;
 		}
-		_ctx->tcp_handle.data = ctx;
+		_ctx->tcp_handle.data = _ctx;
 		_ctx->parent_server = this;
-		_ctx->packet->SetPacketCB(GetPacket, _tcp_handle);
-		_ctx->packet->Start(_pack_head, _pack_tail);
+		_ctx->packet->SetPacketCB(GetPacket, _ctx);
+		_ctx->packet->Start(_packet_head, _packet_tail);
 
 		iret = uv_timer_init(&_loop, &_connect_timer);
 		if(iret)
@@ -180,7 +181,7 @@ namespace UVNET
 	*/
 	bool TCPClient::SetNoDelay(bool enable)
 	{
-		int iret = uv_tcp_nodelay(&ctx->tcp_handle, enable ? 1 : 0);
+		int iret = uv_tcp_nodelay(&_ctx->tcp_handle, enable ? 1 : 0);
 		if(iret)
 		{
 			_err_msg = GetUVError(iret);
@@ -398,7 +399,7 @@ namespace UVNET
 	**  @suggested_size: 建议大小
 	**	@buf:	分配的缓冲区
 	*/
-	void TCPClient::AllocBufferForRecv(uv_handle_t* handle, ssize_t suggested_size, uv_buf_t* buf)
+	void TCPClient::AllocBufferForRecv(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf)
 	{
 		TcpClientCtx* ctx = (TcpClientCtx *)handle->data;
 		assert(ctx);
@@ -415,7 +416,7 @@ namespace UVNET
 	{
 		TcpClientCtx* ctx = (TcpClientCtx *)handle->data;
 		assert(ctx);
-		TCPClient *pClient = ctx->parent_server;
+		TCPClient *pClient = (TCPClient *)ctx->parent_server;
 		if(nread < 0)
 		{
 			// 断开连接事件触发，调用连接回调
@@ -432,7 +433,7 @@ namespace UVNET
 			}
 			else
 			{
-				LOG_TRACE("server closed(%s)", GetUVError(nread));
+				LOG_TRACE("server closed(%s)", GetUVError(nread).c_str());
 			}
 			uv_close((uv_handle_t *)handle, OnClientClose);
 			return;
@@ -440,7 +441,7 @@ namespace UVNET
 		// 调用_send发送circular buf中的数据
 		pClient->_send();
 		// 调用packet对收到的数据进行解包
-		if(nread > 0) pClient->packet->recvdata((const unsigned char *)buf->base, nread);
+		if(nread > 0) pClient->_ctx->packet->recvdata((const unsigned char *)buf->base, nread);
 	}
 
 	/**
@@ -454,7 +455,7 @@ namespace UVNET
 		if(status < 0)
 		{
 			pClient->_recycle_one_param((ClientWriteParam *)req);
-			LOG_ERROR("send error|%s", GetUVError(status));
+			LOG_ERROR("send error|%s", GetUVError(status).c_str());
 			return;
 		}
 		// 调用_send进行真正的数据发送
@@ -525,8 +526,8 @@ namespace UVNET
 			int iret = uv_timer_start(&pClient->_connect_timer, TCPClient::ReconnectTimer, pClient->_repeat_time, pClient->_repeat_time);
 			if(iret)
 			{
-				uv_close((uv_handle_t *)&pClient->_connect_timer, TCPClient::OnClientClose)
-				LOG_ERROR("%s|read failed|%s", __FUNCTION__, GetUVError(iret));
+				uv_close((uv_handle_t *)&pClient->_connect_timer, TCPClient::OnClientClose);
+				LOG_ERROR("%s|read failed|%s", __FUNCTION__, GetUVError(iret).c_str());
 				return;
 			}
 		}
@@ -542,7 +543,7 @@ namespace UVNET
 	{
 		assert(userdata);
 		TcpClientCtx* ctx = (TcpClientCtx *)userdata;
-		TCPClient* pClient = ctx->parent_server;
+		TCPClient* pClient = (TCPClient *)ctx->parent_server;
 		// 收到完整数据封包后调用recv_cb回调函数
 		// TODO: 考虑此处是否向server一样采用处理协议的方式?
 		if(pClient->_recv_cb)	pClient->_recv_cb(packet_head, packet_data, pClient->_recv_userdata);
@@ -590,11 +591,11 @@ namespace UVNET
 			uv_mutex_unlock(&_mutex_writebuf);
 
 			// 发送数据
-			int iret = uv_write((uv_write_t *)&param->write_req, (uv_stream_t *)&ctx->tcp_handle, &param->buf, 1, OnSend);
+			int iret = uv_write((uv_write_t *)&param->write_req, (uv_stream_t *)&_ctx->tcp_handle, &param->buf, 1, OnSend);
 			if(iret)
 			{
 				_recycle_one_param(param);
-				LOG_ERROR("client send data error|%s", GetUVError(iret));
+				LOG_ERROR("client send data error|%s", GetUVError(iret).c_str());
 			}
 		}	// end of while
 	}
@@ -612,7 +613,7 @@ namespace UVNET
 	/**
 	**	尝试重连，目前只在recv出错时重连
 	*/
-	void TCPClient::_start_reconnect()
+	bool TCPClient::_start_reconnect()
 	{
 		_is_connecting = true;
 		_ctx->tcp_handle.data = this;
@@ -645,25 +646,23 @@ namespace UVNET
 			int iret = uv_tcp_init(&pClient->_loop, &pClient->_ctx->tcp_handle);
 			if(iret)
 			{
-				LOG_ERROR("%s|init tcp failed|%s", __FUNCTION__, GetUVError(iret));
+				LOG_ERROR("%s|init tcp failed|%s", __FUNCTION__, GetUVError(iret).c_str());
 				break;
 			}
 			pClient->_ctx->tcp_handle.data = pClient->_ctx;
 			pClient->_ctx->parent_server = pClient;
 			struct sockaddr_in bind_addr;
-			iret = uv_ip4_addr(pClient->_connect_ip.c_str(), pClient->_connect_port.c_str(), &bind_addr);
+			iret = uv_ip4_addr(pClient->_connect_ip.c_str(), pClient->_connect_port, &bind_addr);
 			if(iret)
 			{
-				_err_msg = GetUVError(iret);
-				LOG_ERROR("%s|ip or port invalid|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
+				LOG_ERROR("%s|ip or port invalid|%s|%s|%d", __FUNCTION__, GetUVError(iret).c_str(), pClient->_connect_ip.c_str(), pClient->_connect_port);
 				uv_close((uv_handle_t *)&pClient->_ctx->tcp_handle, NULL);
 				break;
 			}
 			iret = uv_tcp_connect(&pClient->_connect_req, &pClient->_ctx->tcp_handle, (const struct sockaddr*)&bind_addr, OnConnect);
 			if(iret)
 			{
-				_err_msg = GetUVError(iret);
-				LOG_ERROR("%s|reconnect failed|%s|%s|%d", __FUNCTION__, _err_msg.c_str(), ip, port);
+				LOG_ERROR("%s|reconnect failed|%s|%s|%d", __FUNCTION__, GetUVError(iret).c_str(), pClient->_connect_ip.c_str(), pClient->_connect_port);
 				uv_close((uv_handle_t *)&pClient->_ctx->tcp_handle, NULL);
 				break;
 			}

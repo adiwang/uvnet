@@ -4,7 +4,7 @@
 #include <list>
 #include <uv.h>
 #include "packet_sync.h"
-#include "pod_circlarbuffer.h"
+#include "pod_circularbuffer.h"
 
 #ifndef BUFFER_SIZE
 #define BUFFER_SIZE (1024 * 10)
@@ -64,7 +64,7 @@ protected:
 	static void AsyncCB(uv_async_t* handle);
 	static void CloseWalkCB(uv_handle_t* handle, void* arg);
 	static void GetPacket(const NetPacket& packet_head, const unsigned char* data, void* userdata);
-	static void ReconnectTimer(uv_time_t* handle);
+	static void ReconnectTimer(uv_timer_t* handle);
 
 private:
 	bool _init();
@@ -107,7 +107,7 @@ private:
 	TcpCloseCB		_close_cb;
 	void*			_close_userdata;
 
-	ReconnectCB		_connect_cb;
+	ConnectCB		_connect_cb;
 	void*			_connect_userdata;
 
 	uv_timer_t		_connect_timer;
