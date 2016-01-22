@@ -99,6 +99,13 @@ namespace UVNET
 			ClientWriteParam::Release(*it);
 		}
 		_avail_params.clear();
+
+		for(std::map<int, Protocol*>::iterator it = _protocols.begin(); it != _protocol.end(); ++it)
+		{
+			delete it->second;
+		}
+		_protocols.clear();
+
 		LOG_TRACE("tcp client closed");
 	}
 
