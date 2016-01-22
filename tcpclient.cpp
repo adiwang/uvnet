@@ -210,6 +210,52 @@ namespace UVNET
 	}
 
 	/**
+	**	添加server的处理协议
+	**	@proto_id: 协议id
+	**  @proto: 协议处理实例
+	*/
+	void TCPClient::AddProtocol(int proto_id, Protocol* proto)
+	{
+		if(proto_id > 0 && proto)
+		{
+			_protocols.insert(std::make_pair(proto_id, proto));	
+		}
+	}
+
+	/**
+	**	删除协议
+	**	@proto_id: 协议id
+	*/
+	void TCPClient::RemoveProtocol(int protocol_id)
+	{
+		if(protocol_id > 0)
+		{
+			std::map<int, Protocol*>::iterator it = _protocols.find(protocol_id);
+			if(it != _protocols.end())
+			{
+				delete it->second;
+				_protocols.erase(it);
+			}
+		}	
+	}
+
+	/**
+	**	查找指定协议
+	**	@proto_id: 协议id
+	**	@return: 返回找到的协议, NULL为没找到
+	*/
+	Protocol* TCPClient::GetProtocol(int proto_id)
+	{
+		if(protocol_id <= 0) return NULL;
+		std::map<int, Protocol*>::iterator it = _protocols.find(protocol_id);
+		if(it != _protocols.end())
+		{
+			return it->second;
+		}
+		return NULL;
+	}
+
+	/**
 	**	连接目标地址
 	**  @ip: 目标ip
 	**  @port: 目标端口
@@ -547,6 +593,42 @@ namespace UVNET
 		// 收到完整数据封包后调用recv_cb回调函数
 		// TODO: 考虑此处是否向server一样采用处理协议的方式?
 		if(pClient->_recv_cb)	pClient->_recv_cb(packet_head, packet_data, pClient->_recv_userdata);
+
+		int proto_id = 0;
+		const unsigned char* proto_data = NULL;
+		int data_size = 0;
+		if(packethead.type == 1)
+		{
+			// 采用protobuf解析协议
+			CProto proto;
+			proto.ParseFromArray(packetdata, packethead.datalen);
+			proto_id = proto.id();
+			proto_data = proto.body().c_str();
+			data_size = proto.body().size();
+		}
+		else if(packethead.type == 2)
+		{
+			// 手动解析协议
+			// 前4个字节是协议id，后面是序列化后的协议内容
+			if(!CharToInt32(packetdata, proto_id)) return;
+			proto_data = &packetdata[4];
+			data_size = packethead.datalen - 4;
+		}
+		else
+		{
+			// 无效协议
+		}
+		if(proto_id > 0)
+		{
+			Protocol* proto_handle = NULL;
+			proto_handle = pClient->GetProtocol();
+			if(proto_handle)
+			{
+				// 调用协议来解析数据包并返回相应的response
+				const std::string& send_data = proto_handle->ParsePacket(proto_data, data_size);
+				pClient->Send(send_data.c_str(), send_data.size());
+			}
+		}
 	}
 
 	/**

@@ -1,5 +1,6 @@
 #include "tcpserver.h"
 #include "log.h"
+#include "net_base.h"
 
 #include <cassert>
 #include <arpa/inet.h>
@@ -266,9 +267,57 @@ bool TCPServer::SetKeepAlive(int enable, unsigned int delay)
 **	设置server的处理协议
 **  @proto: 协议处理实例
 */
+/*
 void TCPServer::SetProtocol(TCPServerProtocolProcess* proto)
 {
 	_protocol = proto;
+}
+*/
+
+/**
+**	添加server的处理协议
+**	@proto_id: 协议id
+**  @proto: 协议处理实例
+*/
+void TCPServer::AddProtocol(int proto_id, Protocol* proto)
+{
+	if(proto_id > 0 && proto)
+	{
+		_protocols.insert(std::make_pair(proto_id, proto));	
+	}
+}
+
+/**
+**	删除协议
+**	@proto_id: 协议id
+*/
+void TCPServer::RemoveProtocol(int protocol_id)
+{
+	if(protocol_id > 0)
+	{
+		std::map<int, Protocol*>::iterator it = _protocols.find(protocol_id);
+		if(it != _protocols.end())
+		{
+			delete it->second;
+			_protocols.erase(it);
+		}
+	}	
+}
+
+/**
+**	查找指定协议
+**	@proto_id: 协议id
+**	@return: 返回找到的协议, NULL为没找到
+*/
+Protocol* TCPServer::GetProtocol(int proto_id)
+{
+	if(protocol_id <= 0) return NULL;
+	std::map<int, Protocol*>::iterator it = _protocols.find(protocol_id);
+	if(it != _protocols.end())
+	{
+		return it->second;
+	}
+	return NULL;
 }
 
 /**
@@ -876,9 +925,42 @@ void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, voi
 	assert(userdata);
 	SessionCtx* ctx = (SessionCtx *)userdata;
 	TCPServer* server = (TCPServer*)ctx->parent_server;
-	// 调用协议来解析数据包并返回相应的response
-	const std::string& send_data = server->_protocol->ParsePacket(packethead, packetdata);
-	server->_send(send_data, ctx);
+	
+	int proto_id = 0;
+	const unsigned char* proto_data = NULL;
+	int data_size = 0;
+	if(packethead.type == 1)
+	{
+		// 采用protobuf解析协议
+		CProto proto;
+		proto.ParseFromArray(packetdata, packethead.datalen);
+		proto_id = proto.id();
+		proto_data = proto.body().c_str();
+		data_size = proto.body().size();
+	}
+	else if(packethead.type == 2)
+	{
+		// 手动解析协议
+		// 前4个字节是协议id，后面是序列化后的协议内容
+		if(!CharToInt32(packetdata, proto_id)) return;
+		proto_data = &packetdata[4];
+		data_size = packethead.datalen - 4;
+	}
+	else
+	{
+		// 无效协议
+	}
+	if(proto_id > 0)
+	{
+		Protocol* proto_handle = NULL;
+		proto_handle = server->GetProtocol();
+		if(proto_handle)
+		{
+			// 调用协议来解析数据包并返回相应的response
+			const std::string& send_data = proto_handle->ParsePacket(proto_data, data_size);
+			server->_send(send_data, ctx);
+		}
+	}
 }
 
 }	// end of namespace UVNET

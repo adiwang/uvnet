@@ -6,7 +6,8 @@
 #include <vector>
 #include "uv.h"
 #include "log.h"
-#include "tcpserverprotocolprocess.h"
+//#include "tcpserverprotocolprocess.h"
+#include "protocol.h"
 #include "net_base.h"
 #include "packet_sync.h"
 
@@ -60,6 +61,9 @@ public:
 	bool SetNoDelay(bool enable);
 	bool SetKeepAlive(int enable, unsigned int delay);
 	const char* GetLastErrMsg() const { return _err_msg.c_str(); }
+	void AddProtocol(int proto_id, Protocol* proto);
+	void RemoveProtocol(int proto_id);
+	Protocol* GetProtocol(int proto_id);
 
 protected:
 	static int GenerateSessionID();
@@ -104,7 +108,8 @@ private:
 	std::map<int/*session id*/, Session* /*session*/> _sessions;
 	uv_mutex_t	_mutex_sessions;
 
-	TCPServerProtocolProcess*	_protocol;
+	// TCPServerProtocolProcess*	_protocol;
+	std::map<int/*protocol id*/, Protocol*> _protocols;
 	uv_thread_t	_start_thread_handle;
 	int			_start_status;
 	std::string	_err_msg;

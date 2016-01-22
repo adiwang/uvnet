@@ -52,6 +52,9 @@ public:
 	bool SetNoDelay(bool enable);
 	bool SetKeepAlive(int enable, unsigned int delay);
 	const char* GetLastErrMsg() const { return _err_msg.c_str(); }
+	void AddProtocol(int proto_id, Protocol* proto);
+	void RemoveProtocol(int proto_id);
+	Protocol* GetProtocol(int proto_id);
 
 
 protected:
@@ -95,6 +98,8 @@ private:
 	uv_connect_t		_connect_req;
 	int			_connect_status;
 	
+	std::map<int/*protocol id*/, Protocol*> _protocols;
+
 	PodCircularBuffer<char> _write_circularbuf;
 	uv_mutex_t _mutex_writebuf;
 
