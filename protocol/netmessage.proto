@@ -1,0 +1,19 @@
+message CProto
+{
+	required int32 id = 1;
+	required string body = 2;
+}
+
+message CP1
+{
+	required int32 a = 1;
+	required int64 b = 2;
+	required string c = 3;
+}
+
+message CP2
+{
+	required string a = 1;
+	required string b = 2;
+	required int64 c = 3;
+}
