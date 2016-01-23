@@ -37,7 +37,7 @@ packet.Start(0x01,0x02);
 #pragma comment(lib,"libeay32d.lib")
 #endif
 #endif
-typedef void (*GetFullPacket)(const NetPacket& packethead, const unsigned char* packetdata, void* userdata);
+typedef void (*GetFullPacket)(const NetPacket& packethead, const char* packetdata, void* userdata);
 
 #ifndef BUFFER_SIZE
 #define BUFFER_SIZE (1024*10)
@@ -102,7 +102,7 @@ public:
                 //    fprintf(stdout,"%02X",(unsigned char)(headpt)[i]);
                 //}
                 //fprintf(stdout,"\n");
-                CharToNetPacket((const unsigned char*)(headpt), theNexPacket);
+                CharToNetPacket((const char*)(headpt), theNexPacket);
                 if (theNexPacket.header != HEAD || theNexPacket.tail != TAIL || theNexPacket.datalen < 0) {//帧头数据不合法(帧长允许为0)
                     fprintf(stdout, "读取%d数据,包头位于%d. 帧数据不合法(head:%02x,tail:%02x,datalen:%d)\n",
                             truepacketlen, headpos, theNexPacket.header, theNexPacket.tail, theNexPacket.datalen);
@@ -191,7 +191,7 @@ public:
             }
             //回调帧数据给用户
             if (this->packet_cb_) {
-                this->packet_cb_(theNexPacket, (const unsigned char*)thread_packetdata.base, this->packetcb_userdata_);
+                this->packet_cb_(theNexPacket, (const char*)thread_packetdata.base, this->packetcb_userdata_);
             }
             parsetype = PARSE_NOTHING;//重头再来
         }
@@ -232,7 +232,7 @@ private:// no copy
 	       data   --要发送的实际数据
 * @return  std::string --返回的二进制流。地址：&string[0],长度：string.length()
 ******************************/
-inline std::string PacketData(NetPacket& packet, const unsigned char* data)
+inline std::string PacketData(NetPacket& packet, const char* data)
 {
     if (packet.datalen == 0 || data == NULL) {//长度为0的md5为：d41d8cd98f00b204e9800998ecf8427e，改为全0
         memset(packet.check, 0, sizeof(packet.check));
@@ -242,7 +242,7 @@ inline std::string PacketData(NetPacket& packet, const unsigned char* data)
         MD5_Update(&md5, data, packet.datalen);
         MD5_Final(packet.check, &md5);
     }
-    unsigned char packchar[NET_PACKAGE_HEADLEN];
+    char packchar[NET_PACKAGE_HEADLEN];
     NetPacketToChar(packet, packchar);
 
     std::string retstr;

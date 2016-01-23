@@ -2,28 +2,35 @@
 #include <string>
 #include "../tcpserver.h"
 #include "../net_base.h"
-#include "../tcpserverprotocolprocess.h"
+#include "../protocol.h"
 #include "../packet_sync.h"
 #include "../log.h"
+#include "../pb/netmessage.pb.h"
 #include <cstdio>
 #include "uv.h"
 
-class TestTCPProtocol: public TCPServerProtocolProcess
+class EchoProtocol: public Protocol
 {
 public:
-	TestTCPProtocol(){}
-	virtual ~TestTCPProtocol(){}
-	virtual const std::string& ParsePacket(const NetPacket& packet, const unsigned char* buf){
-		static char senddata[256];
-		sprintf(senddata,"****recv datalen %d\n",packet.datalen);
-		fprintf(stdout,"%s\n",senddata);
-		for(int i = 0; i < packet.datalen; i++)
-			printf("%x ", buf[i]);
-		printf("\n");
+	EchoProtocol(){}
+	virtual ~EchoProtocol(){}
+	virtual const std::string& Process(const char * buf, int length){
+		EchoProto ep;
+		ep.ParseFromArray(buf, length);	
+		printf("recv string: %s\n", ep.data().c_str());
 
-		NetPacket tmppack = packet;
-		tmppack.datalen = (std::min)(strlen(senddata),sizeof(senddata)-1);
-		response = PacketData(tmppack,(const unsigned char*)senddata);
+		std::string data;
+		CProto cproto;
+		cproto.set_id(1);
+		cproto.set_body(ep.SerializeAsString());
+		cproto.SerializeToString(&data);
+
+		NetPacket tmppack;
+		tmppack.header = 0x01;
+		tmppack.tail = 0x02;
+		tmppack.type = 1;
+		tmppack.datalen = data.size();
+		response = PacketData(tmppack, data.c_str());
 		return response;
 	}
 private:
@@ -52,11 +59,11 @@ void NewConnect(int clientid, void* userdata)
 
 int main(int argc, char** argv)
 {
-	TestTCPProtocol protocol;
+	EchoProtocol protocol;
     // DeclareDumpFile();
     TCPServer::StartLog(LL_DEBUG, "tcpserver", "./log");
     server.SetNewConnectCB(NewConnect,&server);
-	server.SetProtocol(&protocol);
+    server.AddProtocol(1, &protocol);
     if(!server.Start("0.0.0.0",12345)) {
         fprintf(stdout,"Start Server error:%s\n",server.GetLastErrMsg());
     }

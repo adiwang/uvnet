@@ -17,3 +17,8 @@ message CP2
 	required string b = 2;
 	required int64 c = 3;
 }
+
+message EchoProto
+{
+	required string data = 1;
+}

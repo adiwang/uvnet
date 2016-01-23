@@ -1,6 +1,7 @@
 #include "tcpserver.h"
 #include "log.h"
 #include "net_base.h"
+#include "pb/netmessage.pb.h"
 
 #include <cassert>
 #include <arpa/inet.h>
@@ -14,7 +15,7 @@ TCPServer::TCPServer(unsigned char pack_head, unsigned char pack_tail)
 	: _pack_head(pack_head), _pack_tail(pack_tail)
 	, _new_conn_cb(nullptr), _new_conn_userdata(nullptr), _close_cb(nullptr), _close_userdata(nullptr)
 	, _is_closed(true), _is_user_closed(false)
-	, _start_status(START_DIS), _protocol(NULL)
+	, _start_status(START_DIS)
 {
 	int iret = uv_loop_init(&_loop);
 	if(iret)
@@ -62,7 +63,7 @@ TCPServer::~TCPServer()
 	}
 	_avail_params.clear();
 
-	for(std::map<int, Protocol*>::iterator it = _protocols.begin(); it != _protocol.end(); ++it)
+	for(std::map<int, Protocol*>::iterator it = _protocols.begin(); it != _protocols.end(); ++it)
 	{
 		delete it->second;
 	}
@@ -318,8 +319,8 @@ void TCPServer::RemoveProtocol(int protocol_id)
 */
 Protocol* TCPServer::GetProtocol(int proto_id)
 {
-	if(protocol_id <= 0) return NULL;
-	std::map<int, Protocol*>::iterator it = _protocols.find(protocol_id);
+	if(proto_id <= 0) return NULL;
+	std::map<int, Protocol*>::iterator it = _protocols.find(proto_id);
 	if(it != _protocols.end())
 	{
 		return it->second;
@@ -927,14 +928,14 @@ void OnSend(uv_write_t* req, int status)
 **  @packetdata: 真实的数据
 **	@userdata:	SessionCtx
 */
-void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, void* userdata)
+void GetPacket(const NetPacket& packethead, const char* packetdata, void* userdata)
 {
 	assert(userdata);
 	SessionCtx* ctx = (SessionCtx *)userdata;
 	TCPServer* server = (TCPServer*)ctx->parent_server;
 	
-	int proto_id = 0;
-	const unsigned char* proto_data = NULL;
+	unsigned int proto_id = 0;
+	const char* proto_data = NULL;
 	int data_size = 0;
 	if(packethead.type == 1)
 	{
@@ -960,11 +961,11 @@ void GetPacket(const NetPacket& packethead, const unsigned char* packetdata, voi
 	if(proto_id > 0)
 	{
 		Protocol* proto_handle = NULL;
-		proto_handle = server->GetProtocol();
+		proto_handle = server->GetProtocol(proto_id);
 		if(proto_handle)
 		{
 			// 调用协议来解析数据包并返回相应的response
-			const std::string& send_data = proto_handle->ParsePacket(proto_data, data_size);
+			const std::string& send_data = proto_handle->Process(proto_data, data_size);
 			server->_send(send_data, ctx);
 		}
 	}
