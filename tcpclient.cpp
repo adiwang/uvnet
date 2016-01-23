@@ -1,5 +1,6 @@
 #include "tcpclient.h"
 #include "log.h"
+#include "pb/netmessage.pb.h"
 #define MAXLISTSIZE	20
 
 namespace UVNET
@@ -100,7 +101,7 @@ namespace UVNET
 		}
 		_avail_params.clear();
 
-		for(std::map<int, Protocol*>::iterator it = _protocols.begin(); it != _protocol.end(); ++it)
+		for(std::map<int, Protocol*>::iterator it = _protocols.begin(); it != _protocols.end(); ++it)
 		{
 			delete it->second;
 		}
@@ -253,8 +254,8 @@ namespace UVNET
 	*/
 	Protocol* TCPClient::GetProtocol(int proto_id)
 	{
-		if(protocol_id <= 0) return NULL;
-		std::map<int, Protocol*>::iterator it = _protocols.find(protocol_id);
+		if(proto_id <= 0) return NULL;
+		std::map<int, Protocol*>::iterator it = _protocols.find(proto_id);
 		if(it != _protocols.end())
 		{
 			return it->second;
@@ -592,7 +593,7 @@ namespace UVNET
 	**	@packet_data: 真实的数据
 	**	@userdata: TCPClientCtx
 	*/
-	void TCPClient::GetPacket(const NetPacket& packet_head, const unsigned char* packet_data, void* userdata)
+	void TCPClient::GetPacket(const NetPacket& packet_head, const char* packet_data, void* userdata)
 	{
 		assert(userdata);
 		TcpClientCtx* ctx = (TcpClientCtx *)userdata;
@@ -601,25 +602,25 @@ namespace UVNET
 		// TODO: 考虑此处是否向server一样采用处理协议的方式?
 		if(pClient->_recv_cb)	pClient->_recv_cb(packet_head, packet_data, pClient->_recv_userdata);
 
-		int proto_id = 0;
-		const unsigned char* proto_data = NULL;
+		unsigned int proto_id = 0;
+		const char* proto_data = NULL;
 		int data_size = 0;
-		if(packethead.type == 1)
+		if(packet_head.type == 1)
 		{
 			// 采用protobuf解析协议
 			CProto proto;
-			proto.ParseFromArray(packetdata, packethead.datalen);
+			proto.ParseFromArray(packet_data, packet_head.datalen);
 			proto_id = proto.id();
 			proto_data = proto.body().c_str();
 			data_size = proto.body().size();
 		}
-		else if(packethead.type == 2)
+		else if(packet_head.type == 2)
 		{
 			// 手动解析协议
 			// 前4个字节是协议id，后面是序列化后的协议内容
-			if(!CharToInt32(packetdata, proto_id)) return;
-			proto_data = &packetdata[4];
-			data_size = packethead.datalen - 4;
+			if(!CharToInt32(packet_data, proto_id)) return;
+			proto_data = &packet_data[4];
+			data_size = packet_head.datalen - 4;
 		}
 		else
 		{
@@ -628,11 +629,11 @@ namespace UVNET
 		if(proto_id > 0)
 		{
 			Protocol* proto_handle = NULL;
-			proto_handle = pClient->GetProtocol();
+			proto_handle = pClient->GetProtocol(proto_id);
 			if(proto_handle)
 			{
 				// 调用协议来解析数据包并返回相应的response
-				const std::string& send_data = proto_handle->ParsePacket(proto_data, data_size);
+				const std::string& send_data = proto_handle->Process(proto_data, data_size);
 				pClient->Send(send_data.c_str(), send_data.size());
 			}
 		}

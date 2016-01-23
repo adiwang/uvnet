@@ -1,6 +1,7 @@
 ﻿#include <iostream>
 #include <string>
 #include "../tcpclient.h"
+#include "../pb/netmessage.pb.h"
 using namespace std;
 using namespace UVNET;
 
@@ -9,6 +10,34 @@ int serverport;
 int call_time = 0;
 bool is_exist = false;
 
+class EchoProtocol: public Protocol
+{
+public:
+	EchoProtocol(){}
+	virtual ~EchoProtocol(){}
+	virtual const std::string& Process(const char * buf, int length){
+		EchoProto ep;
+		ep.ParseFromString(std::string(buf, length));	
+		printf("recv string: %s\n", ep.data().c_str());
+
+		std::string data;
+		CProto cproto;
+		cproto.set_id(1);
+		cproto.set_body(ep.SerializeAsString());
+		cproto.SerializeToString(&data);
+
+		NetPacket tmppack;
+		tmppack.header = 0x01;
+		tmppack.tail = 0x02;
+		tmppack.type = 1;
+		tmppack.datalen = data.size();
+		response = PacketData(tmppack, data.c_str());
+		return response;
+	}
+private:
+	std::string response;
+};
+
 void CloseCB(int clientid, void* userdata)
 {
     fprintf(stdout, "cliend %d close\n", clientid);
@@ -16,7 +45,7 @@ void CloseCB(int clientid, void* userdata)
     client->Close();
 }
 
-void ReadCB(const NetPacket& packet, const unsigned char* buf, void* userdata)
+void ReadCB(const NetPacket& packet, const char* buf, void* userdata)
 {
     fprintf(stdout,"call time %d\n",++call_time);
     if (call_time > 5000) {
@@ -49,8 +78,10 @@ int main(int argc, char** argv)
     serverport = std::stoi(argv[2]);
 
     TCPClient client(0x01, 0x02);
-    client.SetRecvCB(ReadCB, &client);
+    //client.SetRecvCB(ReadCB, &client);
     client.SetCloseCB(CloseCB, &client);
+    EchoProtocol protocol;
+    client.AddProtocol(1, &protocol);
     if(!client.Connect(serverip.c_str(), serverport))
     {
             fprintf(stdout, "connect error:%s\n", client.GetLastErrMsg());
@@ -59,21 +90,28 @@ int main(int argc, char** argv)
     {
             fprintf(stdout, "client(%p) connect succeed.\n", &client);
     }
-    char senddata[256];
-    memset(senddata, 0, sizeof(senddata));
-    sprintf(senddata, "client(%p) call 1", &client);
+    
+    EchoProto ep;
+    ep.set_data("client call 1");
+    std::string data;
+    CProto cproto;
+    cproto.set_id(1);
+    cproto.set_body(ep.SerializeAsString());
+    cproto.SerializeToString(&data);
+
     NetPacket packet;
     packet.header = 0x01;
     packet.tail = 0x02;
-    packet.datalen = (std::min)(strlen(senddata), sizeof(senddata) - 1);
-    std::string str = PacketData(packet, (const unsigned char*)senddata);
+    packet.type = 1;
+    packet.datalen = data.size();
+    std::string str = PacketData(packet, data.c_str());
     if (client.Send(&str[0], str.length()) <= 0) 
     {
     	fprintf(stdout, "(%p)send error.%s\n", &client, client.GetLastErrMsg());
     }
     else
     {
-	fprintf(stdout, "send succeed:%s\n", senddata);
+	fprintf(stdout, "send succeed\n");
     }
 	
     while (!is_exist) {

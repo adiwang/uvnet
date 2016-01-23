@@ -2,9 +2,11 @@
 #define _TCPCLIENT_H
 #include <string>
 #include <list>
+#include <map>
 #include <uv.h>
 #include "packet_sync.h"
 #include "pod_circularbuffer.h"
+#include "protocol.h"
 
 #ifndef BUFFER_SIZE
 #define BUFFER_SIZE (1024 * 10)
@@ -66,7 +68,7 @@ protected:
 	static void OnClientClose(uv_handle_t* handle);
 	static void AsyncCB(uv_async_t* handle);
 	static void CloseWalkCB(uv_handle_t* handle, void* arg);
-	static void GetPacket(const NetPacket& packet_head, const unsigned char* data, void* userdata);
+	static void GetPacket(const NetPacket& packet_head, const char* data, void* userdata);
 	static void ReconnectTimer(uv_timer_t* handle);
 
 private:

@@ -262,10 +262,10 @@ typedef void (*TcpCloseCB)(int clientid, void* userdata);
 typedef void (*NewConnectCB)(int clientid, void* userdata);
 
 //TCPServer接收到客户端数据回调给用户
-typedef void (*ServerRecvCB)(int clientid, const NetPacket& packethead, const unsigned char* buf, void* userdata);
+typedef void (*ServerRecvCB)(int clientid, const NetPacket& packethead, const char* buf, void* userdata);
 
 //TCPClient接收到服务器数据回调给用户
-typedef void (*ClientRecvCB)(const NetPacket& packethead, const unsigned char* buf, void* userdata);
+typedef void (*ClientRecvCB)(const NetPacket& packethead, const char* buf, void* userdata);
 
 //网络事件类型
 typedef enum {

@@ -16,7 +16,7 @@ public:
 	virtual ~EchoProtocol(){}
 	virtual const std::string& Process(const char * buf, int length){
 		EchoProto ep;
-		ep.ParseFromArray(buf, length);	
+		ep.ParseFromString(std::string(buf, length));	
 		printf("recv string: %s\n", ep.data().c_str());
 
 		std::string data;

@@ -941,7 +941,8 @@ void GetPacket(const NetPacket& packethead, const char* packetdata, void* userda
 	{
 		// 采用protobuf解析协议
 		CProto proto;
-		proto.ParseFromArray(packetdata, packethead.datalen);
+		// proto.ParseFromArray(packetdata, packethead.datalen);
+		proto.ParseFromString(std::string(packetdata, packethead.datalen));
 		proto_id = proto.id();
 		proto_data = proto.body().c_str();
 		data_size = proto.body().size();
