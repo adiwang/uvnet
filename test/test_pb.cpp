@@ -1,5 +1,5 @@
 #include <iostream>
-#include "pb/netmessage.pb.h"
+#include "../pb/netmessage.pb.h"
 
 class Protocol
 {
@@ -19,7 +19,7 @@ public:
 	{
 		CP1 cp1;
 		cp1.ParseFromArray(buf, length);
-		std::cout << "CP1: a = " << cp1.a() << ", b = " << cp1.b() << ", c = " cp1.c() << std::endl;
+		std::cout << "CP1: a = " << cp1.a() << ", b = " << cp1.b() << ", c = " << cp1.c() << std::endl;
 	}
 };
 
@@ -33,7 +33,7 @@ public:
 	{
 		CP2 cp2;
 		cp2.ParseFromArray(buf, length);
-		std::cout << "CP2: a = " << cp2.a() << ", b = " << cp2.b() << ", c = " cp2.c() << std::endl;
+		std::cout << "CP2: a = " << cp2.a() << ", b = " << cp2.b() << ", c = " << cp2.c() << std::endl;
 	}
 };
 
