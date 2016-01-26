@@ -14,7 +14,7 @@ class EchoProtocol: public Protocol
 public:
 	EchoProtocol(){}
 	virtual ~EchoProtocol(){}
-	virtual const std::string& Process(const char * buf, int length){
+	void Process(const char * buf, int length, void* userdata){
 		EchoProto ep;
 		ep.ParseFromString(std::string(buf, length));	
 		printf("recv string: %s\n", ep.data().c_str());
@@ -30,11 +30,12 @@ public:
 		tmppack.tail = 0x02;
 		tmppack.type = 1;
 		tmppack.datalen = data.size();
-		response = PacketData(tmppack, data.c_str());
-		return response;
+		std::string response = PacketData(tmppack, data.c_str());
+		
+		UVNET::SessionCtx* ctx = (SessionCtx *)userdata;
+		UVNET::TCPServer* server = (TCPServer*)ctx->parent_server;
+		server->_send(response, ctx);
 	}
-private:
-	std::string response;
 };
 
 using namespace std;

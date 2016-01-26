@@ -632,9 +632,7 @@ namespace UVNET
 			proto_handle = pClient->GetProtocol(proto_id);
 			if(proto_handle)
 			{
-				// 调用协议来解析数据包并返回相应的response
-				const std::string& send_data = proto_handle->Process(proto_data, data_size);
-				pClient->Send(send_data.c_str(), send_data.size());
+				proto_handle->Process(proto_data, data_size, userdata);
 			}
 		}
 	}

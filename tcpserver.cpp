@@ -965,9 +965,7 @@ void GetPacket(const NetPacket& packethead, const char* packetdata, void* userda
 		proto_handle = server->GetProtocol(proto_id);
 		if(proto_handle)
 		{
-			// 调用协议来解析数据包并返回相应的response
-			const std::string& send_data = proto_handle->Process(proto_data, data_size);
-			server->_send(send_data, ctx);
+			proto_handle->Process(proto_data, data_size, userdata);
 		}
 	}
 }
