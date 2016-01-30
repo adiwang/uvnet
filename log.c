@@ -101,7 +101,7 @@ int Log_Writer::premakestr(char* m_buffer, LogLevel l)
             vtm.tm_mon + 1, vtm.tm_mday, vtm.tm_hour, vtm.tm_min, vtm.tm_sec);
 }
 
-bool Log_Writer::log(LogLevel l, char* logformat,...)
+bool Log_Writer::log(LogLevel l, const char* logformat,...)
 {
 	MACRO_RET(!checklevel(l), false);
 	int _size;

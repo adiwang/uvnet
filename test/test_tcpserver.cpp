@@ -32,8 +32,8 @@ public:
 		tmppack.datalen = data.size();
 		std::string response = PacketData(tmppack, data.c_str());
 		
-		UVNET::SessionCtx* ctx = (SessionCtx *)userdata;
-		UVNET::TCPServer* server = (TCPServer*)ctx->parent_server;
+		UVNET::SessionCtx* ctx = (UVNET::SessionCtx *)userdata;
+		UVNET::TCPServer* server = (UVNET::TCPServer*)ctx->parent_server;
 		server->_send(response, ctx);
 	}
 };
